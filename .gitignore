@@ -1,0 +1,8 @@
+*.png
+*.ipynb
+*.vim
+*__pycach__*
+*__pycache__*
+*egg-info
+.eggs
+.DS_Store
