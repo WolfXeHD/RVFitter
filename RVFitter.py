@@ -47,7 +47,7 @@ class Line(object):
         self.continuum = splev(angstrom, self.spline)
         self.normed_wlc = angstrom
         self.normed_flux = flux / self.continuum
-        self.normed_error = error
+        self.normed_errors = error
         self.leftValueNorm = leftValueNorm
         self.rightValueNorm = rightValueNorm
 
@@ -76,12 +76,12 @@ class Line(object):
         else:
             ax = ax
 
-        if self.normed_error is None:
+        if self.normed_errors is None:
             print("No errors for normed flux - assuming 1%")
-            self.normed_error = 0.01 * self.normed_flux
+            self.normed_errors = 0.01 * self.normed_flux
         ax.errorbar(self.normed_wlc[indices],
                     self.normed_flux[indices],
-                    yerr=self.normed_error[indices],
+                    yerr=self.normed_errors[indices],
                     fmt='ro',
                     color='black',
                     ecolor='black')
@@ -93,7 +93,8 @@ class Line(object):
 
 class RVFitter(lmfit.Model):
     """Docstring for RVFitter. """
-    def __init__(self, rvobjects, line_list):
+    def __init__(self, specsfilelist_name, rvobjects, line_list):
+        self.specsfilelist_name = specsfilelist_name
         self.rvobjects = rvobjects
         self.line_list = line_list
         self.line_names, self.line_profiles, self.wlc_windows = self._read_line_list(
@@ -114,6 +115,10 @@ class RVFitter(lmfit.Model):
         self.fwhm_base = 'fwhm_line_{name}_epoch{epoch}'
         self.cen_base = 'cen_line_{name}_epoch_{epoch}'
         self.amp_base = 'amp_line_{name}_epoch_{epoch}'
+
+    @property
+    def df_name(self):
+        return self.specsfilelist_name.replace('.txt', '.pkl')
 
     def create_df(self):
         l_dfs = []
@@ -152,6 +157,13 @@ class RVFitter(lmfit.Model):
                              wlc_window=wlc)
             lines.append(this_line)
         return lines
+
+    def save_df(self):
+        self.df.to_pickle(self.df_name)
+        print('Results saved in: {filename}'.format(filename=self.df_name))
+
+    def load_df(self):
+        self.df = pd.read_pickle(self.df_name)
 
     def setup_parameters(self):
         "Step 4. Fit gaussian by using lmfit"
@@ -268,20 +280,43 @@ class RVFitter(lmfit.Model):
                                      self.params,
                                      args=([self.df]))
 
+
     @classmethod
-    def from_specsfilelist_flexi(cls,
-                                 specsfilelist,
+    def from_specsfilelist_name_flexi(cls,
+                                 specsfilelist_name,
                                  id_func,
                                  line_list,
-                                 datetime_formatter="%Y%m%dT%H"):
+                                 datetime_formatter="%Y%m%dT%H",
+                                 debug=False):
+        with open(specsfilelist_name, 'r') as f:
+            specsfilelist = f.read().splitlines()
+        if debug:
+            specsfilelist = specsfilelist[:1]
+
         rvobjects = [
             RVObject.from_specsfile_flexi(
                 specsfile=specsfile,
                 id_func=id_func,
                 datetime_formatter=datetime_formatter,
-                line_list=line_list) for specsfile in specsfilelist
+                line_list=line_list, debug=debug) for specsfile in specsfilelist
         ]
-        return cls(rvobjects=rvobjects, line_list=line_list)
+        return cls(specsfilelist_name=specsfilelist_name, rvobjects=rvobjects, line_list=line_list)
+
+    @classmethod
+    def from_specsfilelist_flexi(cls,
+                                 specsfilelist,
+                                 id_func,
+                                 line_list,
+                                 datetime_formatter="%Y%m%dT%H",
+                                 debug=False):
+        rvobjects = [
+            RVObject.from_specsfile_flexi(
+                specsfile=specsfile,
+                id_func=id_func,
+                datetime_formatter=datetime_formatter,
+                line_list=line_list, debug=debug) for specsfile in specsfilelist
+        ]
+        return cls(specsfile=None, rvobjects=rvobjects, line_list=line_list)
 
 
 class RVObject(object):
@@ -360,10 +395,12 @@ class RVObject(object):
                              specsfile,
                              line_list,
                              id_func,
-                             datetime_formatter="%Y%m%dT%H"):
+                             datetime_formatter="%Y%m%dT%H",
+                             debug=False):
         """classmethod for creation of RVObject
         :arg1: specsfile - path to specsfile which should be read
         :arg2: id_func - function which processes the specsfile string and returns starname and date
+        :param debug:
 
         :returns: RVObject
         """
@@ -371,6 +408,8 @@ class RVObject(object):
 
         wavelength, flux, flux_errors = cls._read_specsfile(specsfile)
         lines = cls.make_line_objects(line_list)
+        if debug:
+            lines = lines[:3]
 
         return cls(starname=starname,
                    date=date,
@@ -447,7 +486,7 @@ class RVObject(object):
             dict_for_df["wlc_window"] = line.wlc_window
             dict_for_df["normed_wlc"] = [np.array(line.normed_wlc)]
             dict_for_df["normed_flux"] = [np.array(line.normed_flux)]
-            dict_for_df["normed_error"] = [np.array(line.normed_error)]
+            dict_for_df["normed_errors"] = [np.array(line.normed_errors)]
             dict_for_df["leftValueNorm"] = line.leftValueNorm
             dict_for_df["rightValueNorm"] = line.rightValueNorm
             dict_for_df["leftClip"] = line.leftClip

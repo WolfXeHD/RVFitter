@@ -8,6 +8,7 @@ from RVFitter import RVObject
 
 def id_func(specsfile):
     filename = os.path.basename(specsfile)
+    print('FILE NAME', specsfile)
     splitted_file = filename.split("_")
     starname = splitted_file[0]
     date = splitted_file[2]

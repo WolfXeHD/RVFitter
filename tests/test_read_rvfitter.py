@@ -44,24 +44,29 @@ def gauss_dataset(params, row):
 class TestRVFitter(unittest.TestCase):
     line_list = pkg_resources.resource_filename(
         "RVFitter", "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
-    pattern = pkg_resources.resource_filename("RVFitter",
-                                              "tests/test_data/*.nspec")
-    specsfilelist = glob.glob(pattern)
+    specsfilelist = pkg_resources.resource_filename(
+        "RVFitter", "tests/test_data/debug_specfile_list.txt")
+    # pattern = pkg_resources.resource_filename("RVFitter",
+    #                                           "tests/test_data/*.nspec")
+    # specsfilelist = glob.glob(pattern)
 
-    myfitter = RVFitter.from_specsfilelist_flexi(specsfilelist=specsfilelist,
+    myfitter = RVFitter.from_specsfilelist_name_flexi(specsfilelist_name=specsfilelist,
                                                  id_func=id_func,
                                                  line_list=line_list)
+
 
     def test_fitting(self):
         line_list = pkg_resources.resource_filename(
             "RVFitter",
             "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
-        pattern = pkg_resources.resource_filename("RVFitter",
-                                                  "tests/test_data/*.nspec")
-        specsfilelist = glob.glob(pattern)
+        specsfilelist = pkg_resources.resource_filename(
+            "RVFitter", "tests/test_data/debug_specfile_list.txt")
+        # pattern = pkg_resources.resource_filename("RVFitter",
+        #                                           "tests/test_data/*.nspec")
+        # specsfilelist = glob.glob(pattern)
 
-        myfitter = RVFitter.from_specsfilelist_flexi(
-            specsfilelist=specsfilelist, id_func=id_func, line_list=line_list)
+        myfitter = RVFitter.from_specsfilelist_name_flexi(
+            specsfilelist_name=specsfilelist, id_func=id_func, line_list=line_list)
         for rvobject in myfitter.rvobjects:
             for line in rvobject.lines:
                 angstrom, flux, error = rvobject.angstrom, rvobject.flux, rvobject.flux_errors
