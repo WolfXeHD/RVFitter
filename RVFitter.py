@@ -18,14 +18,17 @@ class Line(object):
 
         hash_object = hashlib.md5(self.line_name.encode())
         self.hash = hash_object.hexdigest()[:10]
+        self._clear()
 
+
+    def _clear(self):
         self.normed_wlc = None
         self.normed_flux = None
         self.normed_errors = None
         self.leftValueNorm = None
         self.rightValueNorm = None
-        self.leftClip = None
-        self.rightClip = None
+        self.leftClip = []
+        self.rightClip = []
         self.clipped_wlc = None
         self.clipped_flux = None
         self.clipped_error = None
@@ -51,19 +54,59 @@ class Line(object):
         self.leftValueNorm = leftValueNorm
         self.rightValueNorm = rightValueNorm
 
+        self.clipped_wlc = self.normed_wlc
+        self.clipped_flux = self.normed_flux
+
     def clip_spectrum(self, leftClip, rightClip):
         if not self.got_normed:
-            print("You cannot clip before you norm!")
+            print("You cannot clip before you normalize!")
             raise SystemExit
         else:
-            self.leftClip = leftClip
-            self.rightClip = rightClip
-            masking = (self.normed_wlc > self.leftClip) & (self.normed_wlc <
-                                                           self.rightClip)
-            self.clipped_wlc = self.normed_wlc[masking]
-            self.clipped_flux = self.normed_flux[masking]
+            self.leftClip.append(leftClip)
+            self.rightClip.append(rightClip)
 
-    def plot_normed_spectrum(self, ax=None):
+            masking = (self.clipped_wlc > leftClip) & (self.clipped_wlc <
+                                                           rightClip)
+            self.clipped_wlc = self.clipped_wlc[~masking]
+            self.clipped_flux = self.clipped_flux[~masking]
+            self.is_clipped = True
+
+    def plot_clips(self, ax):
+        for left, right in zip(self.leftClip, self.rightClip):
+            ax.axvspan(left, right, color='blue', alpha=0.2)
+
+    def plot_clipped_spectrum(self, ax=None, title_prefix=None):
+
+        if not self.is_clipped:
+            print("Clipped spectrum not found!")
+            raise SystemExit
+        indices = np.logical_and(
+            self.clipped_wlc > self.line_profile - self.wlc_window,
+            self.clipped_wlc < self.line_profile + self.wlc_window)
+        if ax is None:
+            fig, ax = plt.subplots()
+        else:
+            ax = ax
+
+        if self.clipped_error is None:
+            print("No errors for normed flux - assuming 1%")
+            self.clipped_error = 0.01 * self.clipped_flux
+        ax.errorbar(self.clipped_wlc[indices],
+                    self.clipped_flux[indices],
+                    yerr=self.clipped_error[indices],
+                    fmt='ro',
+                    color='black',
+                    ecolor='black')
+        ax.axhline(y=1, linestyle='-.', color='black')
+        ax.set_xlabel('wavelength ($\AA$)')
+        ax.set_ylabel('flux')
+        title = self.line_name + ' ' + str("%.0f" % self.line_profile) + ' (clipped)'
+        if title_prefix == None:
+            ax.set_title(title)
+        else:
+            ax.set_title(title_prefix + title)
+
+    def plot_normed_spectrum(self, ax=None, title_prefix=None):
 
         if not self.got_normed:
             print("You cannot plot a normed spectrum before adding it!")
@@ -88,15 +131,19 @@ class Line(object):
         ax.axhline(y=1, linestyle='-.', color='black')
         ax.set_xlabel('wavelength ($\AA$)')
         ax.set_ylabel('flux')
-        ax.set_title(self.line_name + ' ' + str("%.0f" % self.line_profile))
-
+        title = self.line_name + ' ' + str("%.0f" % self.line_profile) + ' (normalized)'
+        if title_prefix == None:
+            ax.set_title(title)
+        else:
+            ax.set_title(title_prefix + title)
 
 class RVFitter(lmfit.Model):
     """Docstring for RVFitter. """
-    def __init__(self, specsfilelist_name, rvobjects, line_list):
+    def __init__(self, specsfilelist_name, rvobjects, line_list, debug=False):
         self.specsfilelist_name = specsfilelist_name
         self.rvobjects = rvobjects
         self.line_list = line_list
+        self.debug = debug
         self.line_names, self.line_profiles, self.wlc_windows = self._read_line_list(
             self.line_list)
         self.lines = self.make_line_objects()
@@ -118,7 +165,10 @@ class RVFitter(lmfit.Model):
 
     @property
     def df_name(self):
-        return self.specsfilelist_name.replace('.txt', '.pkl')
+        if not self.debug:
+            return self.specsfilelist_name.replace('.txt', '.pkl')
+        else:
+            return self.specsfilelist_name.replace('.txt', '_DEBUG.pkl')
 
     def create_df(self):
         l_dfs = []
@@ -419,7 +469,7 @@ class RVObject(object):
                    lines=lines,
                    datetime_formatter=datetime_formatter)
 
-    def plot_line(self, line, clipping=False, ax=None):
+    def plot_line(self, line, clipping=False, ax=None, title_prefix=None):
         """TODO: Docstring for plot_line.
 
         :arg1: TODO
@@ -445,8 +495,11 @@ class RVObject(object):
         ax.axvline(x=cl, linestyle=':', color='black')
         ax.set_xlabel('wavelength ($\AA$)')
         ax.set_ylabel('flux')
-        ax.set_title(line_name + ' ' + str("%.0f" % cl))
-
+        title = line_name + ' ' + str("%.0f" % cl)
+        if title_prefix == None:
+            ax.set_title(title)
+        else:
+            ax.set_title(title_prefix + title)
     @classmethod
     def _read_line_list(cls, linelist):
         data = np.loadtxt(linelist, dtype=str)
@@ -489,8 +542,8 @@ class RVObject(object):
             dict_for_df["normed_errors"] = [np.array(line.normed_errors)]
             dict_for_df["leftValueNorm"] = line.leftValueNorm
             dict_for_df["rightValueNorm"] = line.rightValueNorm
-            dict_for_df["leftClip"] = line.leftClip
-            dict_for_df["rightClip"] = line.rightClip
+            dict_for_df["leftClip"] = [np.array(line.leftClip)]
+            dict_for_df["rightClip"] = [np.array(line.rightClip)]
             dict_for_df["clipped_wlc"] = [np.array(line.clipped_wlc)]
             dict_for_df["clipped_flux"] = [np.array(line.clipped_flux)]
             dict_for_df["clipped_error"] = [np.array(line.clipped_error)]
