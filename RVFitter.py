@@ -20,6 +20,7 @@ class Line(object):
         self.hash = hash_object.hexdigest()[:10]
         self._clear()
 
+        self.is_skipped = False
 
     def _clear(self):
         self.normed_wlc = None
@@ -214,6 +215,79 @@ class RVFitter(lmfit.Model):
 
     def load_df(self):
         self.df = pd.read_pickle(self.df_name)
+
+        star_names = self.df['star_name'].unique()
+        dates = self.df['date'].unique()
+
+        query = "(star_name == '{star}') & (date == '{date}')"
+
+        rvobjects = []
+        for star in star_names:
+            for date in dates:
+                this_query = query.format(star=star, date=date)
+                this_df = self.df.query(this_query)
+
+                lines = []
+                wavelengths = []
+                fluxes = []
+                flux_errors = []
+
+                for idx, row in this_df.iterrows():
+                    this_line = Line(line_name=row['line_name'],
+                         line_profile=row['line_profile'],
+                         wlc_window=row['wlc_window'])
+
+                    this_line.normed_wlc     = row['normed_wlc']
+                    this_line.normed_flux    = row['normed_flux']
+                    this_line.normed_errors  = row['normed_errors']
+                    this_line.leftValueNorm  = row['leftValueNorm']
+                    this_line.rightValueNorm = row['rightValueNorm']
+                    this_line.leftClip       = row['leftClip']
+                    this_line.rightClip      = row['rightClip']
+                    this_line.clipped_wlc    = row['clipped_wlc']
+                    this_line.clipped_flux   = row['clipped_flux']
+                    this_line.clipped_error  = row['clipped_error']
+                    this_line.got_normed     = True
+                    this_line.is_clipped     = True
+
+                    lines.append(this_line)
+                    fluxes.append(row["flux"])
+                    wavelengths.append(row["wavelength"])
+                    flux_errors.append(row["flux_error"])
+
+                if self.find_if_list_of_arrays_contains_different_arrays(fluxes):
+                    print("WARNING: There are different fluxes for the same line!")
+                    print("         This is not supported by the fitter!")
+                    raise SystemExit
+                if self.find_if_list_of_arrays_contains_different_arrays(wavelengths):
+                    print("WARNING: There are different wavelengths for the same line!")
+                    print("         This is not supported by the fitter!")
+                    raise SystemExit
+                if self.find_if_list_of_arrays_contains_different_arrays(flux_errors):
+                    print("WARNING: There are different flux errors for the same line!")
+                    print("         This is not supported by the fitter!")
+                    raise SystemExit
+
+                this_rvobject = RVObject(starname=star, lines=lines, date=date, wavelength=wavelengths[0],
+                         flux=fluxes[0], flux_errors=flux_errors[0]
+                         )
+                rvobjects.append(this_rvobject)
+        self.rvobjects = rvobjects
+
+
+    def find_if_list_of_arrays_contains_different_arrays(self, list_of_arrays):
+        """
+        returns True if any of the arrays in the list are different
+        """
+        if len(list_of_arrays) == 0:
+            return False
+        else:
+            first_array = list_of_arrays[0]
+            for array in list_of_arrays:
+                if not np.array_equal(first_array, array):
+                    return True
+            return False
+
 
     def setup_parameters(self):
         "Step 4. Fit gaussian by using lmfit"
@@ -534,21 +608,22 @@ class RVObject(object):
         dict_for_df["flux_error"] = [self.flux_errors]
         dict_for_df["date_time_obj"] = self.date_time_obj
         for line in self.lines:
-            dict_for_df["line_name"] = line.line_name
-            dict_for_df["line_profile"] = line.line_profile
-            dict_for_df["wlc_window"] = line.wlc_window
-            dict_for_df["normed_wlc"] = [np.array(line.normed_wlc)]
-            dict_for_df["normed_flux"] = [np.array(line.normed_flux)]
-            dict_for_df["normed_errors"] = [np.array(line.normed_errors)]
-            dict_for_df["leftValueNorm"] = line.leftValueNorm
-            dict_for_df["rightValueNorm"] = line.rightValueNorm
-            dict_for_df["leftClip"] = [np.array(line.leftClip)]
-            dict_for_df["rightClip"] = [np.array(line.rightClip)]
-            dict_for_df["clipped_wlc"] = [np.array(line.clipped_wlc)]
-            dict_for_df["clipped_flux"] = [np.array(line.clipped_flux)]
-            dict_for_df["clipped_error"] = [np.array(line.clipped_error)]
-            dict_for_df["line_hash"] = line.hash
+            if not line.is_skipped:
+                dict_for_df["line_name"] = line.line_name
+                dict_for_df["line_profile"] = line.line_profile
+                dict_for_df["wlc_window"] = line.wlc_window
+                dict_for_df["normed_wlc"] = [np.array(line.normed_wlc)]
+                dict_for_df["normed_flux"] = [np.array(line.normed_flux)]
+                dict_for_df["normed_errors"] = [np.array(line.normed_errors)]
+                dict_for_df["leftValueNorm"] = line.leftValueNorm
+                dict_for_df["rightValueNorm"] = line.rightValueNorm
+                dict_for_df["leftClip"] = [np.array(line.leftClip)]
+                dict_for_df["rightClip"] = [np.array(line.rightClip)]
+                dict_for_df["clipped_wlc"] = [np.array(line.clipped_wlc)]
+                dict_for_df["clipped_flux"] = [np.array(line.clipped_flux)]
+                dict_for_df["clipped_error"] = [np.array(line.clipped_error)]
+                dict_for_df["line_hash"] = line.hash
 
-            this_df = pd.DataFrame.from_dict(dict_for_df)
-            df = df.append(this_df)
+                this_df = pd.DataFrame.from_dict(dict_for_df)
+                df = df.append(this_df)
         return df
