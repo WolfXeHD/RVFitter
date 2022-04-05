@@ -46,6 +46,9 @@ class TestRVFitter(unittest.TestCase):
         "RVFitter", "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
     specsfilelist = pkg_resources.resource_filename(
         "RVFitter", "tests/test_data/debug_specfile_list.txt")
+    print(line_list)
+    print(specsfilelist)
+
     # pattern = pkg_resources.resource_filename("RVFitter",
     #                                           "tests/test_data/*.nspec")
     # specsfilelist = glob.glob(pattern)
@@ -55,44 +58,64 @@ class TestRVFitter(unittest.TestCase):
                                                  line_list=line_list)
 
 
-    def test_fitting(self):
+    #  def test_fitting(self):
+    #      line_list = pkg_resources.resource_filename(
+    #          "RVFitter",
+    #          "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
+    #      specsfilelist = pkg_resources.resource_filename(
+    #          "RVFitter", "tests/test_data/debug_specfile_list.txt")
+    #      # pattern = pkg_resources.resource_filename("RVFitter",
+    #      #                                           "tests/test_data/*.nspec")
+    #      # specsfilelist = glob.glob(pattern)
+    #
+    #      myfitter = RVFitter.from_specsfilelist_name_flexi(
+    #          specsfilelist_name=specsfilelist, id_func=id_func, line_list=line_list)
+    #      for rvobject in myfitter.rvobjects:
+    #          for line in rvobject.lines:
+    #              angstrom, flux, error = rvobject.angstrom, rvobject.flux, rvobject.flux_errors
+    #              line.add_normed_spectrum(angstrom=angstrom,
+    #                                       flux=flux,
+    #                                       error=error,
+    #                                       leftValueNorm=0.95,
+    #                                       rightValueNorm=1.01)
+    #
+    #              left = line.line_profile - 5
+    #              right = line.line_profile + 5
+    #              line.clip_spectrum(leftClip=left, rightClip=right)
+    #
+    #      myfitter.create_df()
+    #      myfitter.setup_parameters()
+    #      myfitter.constrain_parameters(group="sig")
+    #      #  myfitter.constrain_parameters(group="amp")
+    #      myfitter.set_objective(objective)
+    #      myfitter.run_fit()
+    #      myfitter.print_fit_result()
+    #
+    #
+    #      #  for _, row in myfitter.df.iterrows():
+    #      #      plt.plot(row["clipped_wlc"], row["clipped_flux"])
+    #      #      plt.plot(row["clipped_wlc"], gauss(row["clipped_wlc"]))
+    #      #      plt.show()
+
+    def test_loading_from_df(self):
         line_list = pkg_resources.resource_filename(
-            "RVFitter",
-            "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
+            "RVFitter", "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
         specsfilelist = pkg_resources.resource_filename(
             "RVFitter", "tests/test_data/debug_specfile_list.txt")
+        print(line_list)
+        print(specsfilelist)
+
         # pattern = pkg_resources.resource_filename("RVFitter",
         #                                           "tests/test_data/*.nspec")
         # specsfilelist = glob.glob(pattern)
 
-        myfitter = RVFitter.from_specsfilelist_name_flexi(
-            specsfilelist_name=specsfilelist, id_func=id_func, line_list=line_list)
-        for rvobject in myfitter.rvobjects:
-            for line in rvobject.lines:
-                angstrom, flux, error = rvobject.angstrom, rvobject.flux, rvobject.flux_errors
-                line.add_normed_spectrum(angstrom=angstrom,
-                                         flux=flux,
-                                         error=error,
-                                         leftValueNorm=0.95,
-                                         rightValueNorm=1.01)
+        myfitter = RVFitter.from_specsfilelist_name_flexi(specsfilelist_name=specsfilelist,
+                                                     id_func=id_func,
+                                                     line_list=line_list)
+        myfitter.load_df()
 
-                left = line.line_profile - 5
-                right = line.line_profile + 5
-                line.clip_spectrum(leftClip=left, rightClip=right)
-
-        myfitter.create_df()
-        myfitter.setup_parameters()
-        myfitter.constrain_parameters(group="sig")
-        #  myfitter.constrain_parameters(group="amp")
-        myfitter.set_objective(objective)
-        myfitter.run_fit()
-        myfitter.print_fit_result()
-
-
-        #  for _, row in myfitter.df.iterrows():
-        #      plt.plot(row["clipped_wlc"], row["clipped_flux"])
-        #      plt.plot(row["clipped_wlc"], gauss(row["clipped_wlc"]))
-        #      plt.show()
+        print(len(myfitter.rvobjects))
+        print(len(myfitter.rvobjects[0].lines))
 
 
 if __name__ == "__main__":
