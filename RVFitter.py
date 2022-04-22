@@ -20,7 +20,7 @@ class Line(object):
         self.hash = hash_object.hexdigest()[:10]
         self._clear()
 
-        self.is_skipped = False
+        self.is_selected = True
 
     def _clear(self):
         self.normed_wlc = None
@@ -214,6 +214,7 @@ class RVFitter(lmfit.Model):
         print('Results saved in: {filename}'.format(filename=self.df_name))
 
     def load_df(self):
+        print("Loading dataframe from {filename}".format(filename=self.df_name))
         self.df = pd.read_pickle(self.df_name)
 
         star_names = self.df['star_name'].unique()
@@ -273,7 +274,6 @@ class RVFitter(lmfit.Model):
                          )
                 rvobjects.append(this_rvobject)
         self.rvobjects = rvobjects
-
 
     def find_if_list_of_arrays_contains_different_arrays(self, list_of_arrays):
         """
@@ -415,7 +415,7 @@ class RVFitter(lmfit.Model):
         with open(specsfilelist_name, 'r') as f:
             specsfilelist = f.read().splitlines()
         if debug:
-            specsfilelist = specsfilelist[:1]
+            specsfilelist = specsfilelist[:2]
 
         rvobjects = [
             RVObject.from_specsfile_flexi(
@@ -472,6 +472,11 @@ class RVObject(object):
             print("Known lines are:")
             for line in self.lines:
                 print("\t", line.line_name)
+
+    def apply_selecting(self, standard_epoch):
+        for line, standard_line in zip(self.lines, standard_epoch.lines):
+            line.is_selected = standard_line.is_selected
+
 
     @property
     def angstrom(self):
@@ -608,7 +613,7 @@ class RVObject(object):
         dict_for_df["flux_error"] = [self.flux_errors]
         dict_for_df["date_time_obj"] = self.date_time_obj
         for line in self.lines:
-            if not line.is_skipped:
+            if line.is_selected:
                 dict_for_df["line_name"] = line.line_name
                 dict_for_df["line_profile"] = line.line_profile
                 dict_for_df["wlc_window"] = line.wlc_window
