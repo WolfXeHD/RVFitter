@@ -217,13 +217,13 @@ class RVFitter(lmfit.Model):
         print("Loading dataframe from {filename}".format(filename=self.df_name))
         self.df = pd.read_pickle(self.df_name)
 
-        star_names = self.df['star_name'].unique()
+        starnames = self.df['starname'].unique()
         dates = self.df['date'].unique()
 
-        query = "(star_name == '{star}') & (date == '{date}')"
+        query = "(starname == '{star}') & (date == '{date}')"
 
         rvobjects = []
-        for star in star_names:
+        for star in starnames:
             for date in dates:
                 this_query = query.format(star=star, date=date)
                 this_df = self.df.query(this_query)
@@ -605,7 +605,7 @@ class RVObject(object):
     def make_dataframe(self):
         df = pd.DataFrame()
         dict_for_df = dict()
-        dict_for_df["star_name"] = self.starname
+        dict_for_df["starname"] = self.starname
         dict_for_df["date"] = self.date
         dict_for_df["wavelength"] = [np.array(self.wavelength)]
         dict_for_df["angstrom"] = [np.array(self.angstrom)]
