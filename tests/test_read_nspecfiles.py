@@ -77,6 +77,5 @@ class TestRVObject(unittest.TestCase):
             line.clip_spectrum(leftClip=left, rightClip=right)
 
 
-
 if __name__ == "__main__":
     unittest.main()

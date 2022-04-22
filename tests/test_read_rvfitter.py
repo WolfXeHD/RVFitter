@@ -5,6 +5,7 @@ import glob
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import ipdb
 
 from RVFitter import RVFitter
 
@@ -16,20 +17,22 @@ def id_func(specsfile):
     date = splitted_file[2]
     return starname, date
 
+
 def objective(params, df):
     """ calculate total residual for fits to several data sets held
     in a 2-D array, and modeled by Gaussian functions"""
     resid = []
     for _, row in df.iterrows():
-        resid.extend((row["clipped_flux"] -
-                          gauss_dataset(params, row)))
+        resid.extend((row["clipped_flux"] - gauss_dataset(params, row)))
     return np.array(resid)
+
 
 def gauss(x, amp, cen, sigma):
     #    "basic gaussian"
     #    return 1-amp*np.exp(-(x-cen)**2/(2.*sigma**2))
     "basic lorentzian"
-    return 1 - (amp / (1 + ((1.0 * x - cen) / sigma) ** 2)) / (np.pi * sigma)
+    return 1 - (amp / (1 + ((1.0 * x - cen) / sigma)**2)) / (np.pi * sigma)
+
 
 def gauss_dataset(params, row):
     par_names = row["parameters"]
@@ -38,7 +41,6 @@ def gauss_dataset(params, row):
     sig = params[par_names["sig"]]
     x = row["clipped_wlc"]
     return gauss(x, amp, cen, sig)
-
 
 
 class TestRVFitter(unittest.TestCase):
@@ -53,10 +55,8 @@ class TestRVFitter(unittest.TestCase):
     #                                           "tests/test_data/*.nspec")
     # specsfilelist = glob.glob(pattern)
 
-    myfitter = RVFitter.from_specsfilelist_name_flexi(specsfilelist_name=specsfilelist,
-                                                 id_func=id_func,
-                                                 line_list=line_list)
-
+    myfitter = RVFitter.from_specsfilelist_name_flexi(
+        specsfilelist_name=specsfilelist, id_func=id_func, line_list=line_list)
 
     #  def test_fitting(self):
     #      line_list = pkg_resources.resource_filename(
@@ -99,23 +99,34 @@ class TestRVFitter(unittest.TestCase):
 
     def test_loading_from_df(self):
         line_list = pkg_resources.resource_filename(
-            "RVFitter", "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
+            "RVFitter",
+            "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
         specsfilelist = pkg_resources.resource_filename(
-            "RVFitter", "tests/test_data/debug_specfile_list.txt")
+            "RVFitter", "tests/test_data/B111_speclist_Tim.txt")
         print(line_list)
         print(specsfilelist)
 
-        # pattern = pkg_resources.resource_filename("RVFitter",
-        #                                           "tests/test_data/*.nspec")
-        # specsfilelist = glob.glob(pattern)
-
-        myfitter = RVFitter.from_specsfilelist_name_flexi(specsfilelist_name=specsfilelist,
-                                                     id_func=id_func,
-                                                     line_list=line_list)
+        myfitter = RVFitter.from_specsfilelist_name_flexi(
+            specsfilelist_name=specsfilelist,
+            id_func=id_func,
+            line_list=line_list)
         myfitter.load_df()
 
-        print(len(myfitter.rvobjects))
-        print(len(myfitter.rvobjects[0].lines))
+        #  print(len(myfitter.rvobjects))
+        #  print(len(myfitter.rvobjects[0].lines))
+
+        print(myfitter.df)
+
+        for rvobject in myfitter.rvobjects:
+            print(rvobject.starname)
+            print(rvobject.date)
+
+            #  for line in rvobject.lines:
+            #      pass
+
+        equality = myfitter.df.iloc[2]["normed_wlc"] != myfitter.rvobjects[
+            0].lines[2].normed_wlc
+        self.assertEqual(np.sum(equality), 0)
 
 
 if __name__ == "__main__":
