@@ -99,7 +99,7 @@ class Line(object):
                     color='black',
                     ecolor='black')
         ax.axhline(y=1, linestyle='-.', color='black')
-        ax.set_xlabel('wavelength ($\AA$)')
+        ax.set_xlabel(r'wavelength ($\AA$)')
         ax.set_ylabel('flux')
         title = self.line_name + ' ' + str("%.0f" % self.line_profile) + ' (clipped)'
         if title_prefix == None:
@@ -130,7 +130,7 @@ class Line(object):
                     color='black',
                     ecolor='black')
         ax.axhline(y=1, linestyle='-.', color='black')
-        ax.set_xlabel('wavelength ($\AA$)')
+        ax.set_xlabel(r'wavelength ($\AA$)')
         ax.set_ylabel('flux')
         title = self.line_name + ' ' + str("%.0f" % self.line_profile) + ' (normalized)'
         if title_prefix == None:
@@ -572,7 +572,7 @@ class RVObject(object):
             ax.plot(a[ind], f[ind], 'k-')
         ax.axhline(y=1, linestyle='-.', color='black')
         ax.axvline(x=cl, linestyle=':', color='black')
-        ax.set_xlabel('wavelength ($\AA$)')
+        ax.set_xlabel(r'wavelength ($\AA$)')
         ax.set_ylabel('flux')
         title = line_name + ' ' + str("%.0f" % cl)
         if title_prefix == None:
