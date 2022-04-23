@@ -70,6 +70,8 @@ class Line(object):
         self.continuum = splev(angstrom, self.spline)
         self.normed_wlc = angstrom
         self.normed_flux = flux / self.continuum
+        if np.isnan(np.sum(self.normed_flux)):
+            __import__('ipdb').set_trace()
         self.normed_errors = error
         self.leftValueNorm = leftValueNorm
         self.rightValueNorm = rightValueNorm
@@ -192,8 +194,8 @@ class RVFitter(lmfit.Model):
 
     def create_df(self):
         l_dfs = []
-        for rvobject in self.stars:
-            df = rvobject.make_dataframe()
+        for star in self.stars:
+            df = star.make_dataframe()
             l_dfs.append(df)
         self.df = pd.concat(l_dfs, axis=0)
 
@@ -606,6 +608,7 @@ class Star(object):
             ax.set_title(title)
         else:
             ax.set_title(title_prefix + title)
+
     @classmethod
     def _read_line_list(cls, linelist):
         data = np.loadtxt(linelist, dtype=str)

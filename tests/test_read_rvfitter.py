@@ -72,9 +72,9 @@ class TestRVFitter(unittest.TestCase):
             line_list=self.line_list)
 
     def test_fitting(self):
-        for rvobject in self.myfitter.stars:
-            for line in rvobject.lines:
-                angstrom, flux, error = rvobject.angstrom, rvobject.flux, rvobject.flux_errors
+        for star in self.myfitter.stars:
+            for line in star.lines:
+                angstrom, flux, error = star.angstrom, star.flux, star.flux_errors
                 line.add_normed_spectrum(angstrom=angstrom,
                                          flux=flux,
                                          error=error,
