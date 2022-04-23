@@ -25,6 +25,7 @@ https://github.com/MaclaRamirez/RVFitter_scripts
 
 * unittests for fitting
 * apply the fitting range (wlc-window) to the spectra in velocity space
+* add Docstrings
 
 
 ## Medium term
