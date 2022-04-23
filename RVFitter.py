@@ -6,10 +6,10 @@ import lmfit
 import hashlib
 import pandas as pd
 import astropy.units as u
+import astropy.constants as const
 
 # TODO: add a unique identifier for a line which can be used as key for parameters
 
-c = 299792.458
 
 class Line(object):
     def __init__(self, line_name, line_profile, wlc_window):
@@ -58,7 +58,7 @@ class Line(object):
             return self.wave_to_vel(self.clipped_wlc, self.line_profile)
 
     def wave_to_vel(self, wavelength, w0):
-        vel = (c.to(u.km/u.s).value * ((wavelength - w0) / w0))
+        vel = (const.c.to(u.km/u.s).value * ((wavelength - w0) / w0))
         return vel
 
     def add_normed_spectrum(self, angstrom, flux, error, leftValueNorm,
