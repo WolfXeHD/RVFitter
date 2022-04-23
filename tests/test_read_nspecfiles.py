@@ -3,7 +3,7 @@ import pkg_resources
 import os
 import matplotlib.pyplot as plt
 
-from RVFitter import RVObject
+from RVFitter import Star
 
 
 def id_func(specsfile):
@@ -23,7 +23,7 @@ class TestRVObject(unittest.TestCase):
     line_list_debug = pkg_resources.resource_filename(
         "RVFitter", "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
 
-    mytest = RVObject.from_specsfile(starname="B275",
+    mytest = Star.from_specsfile(starname="B275",
                                      date="20190605T07",
                                      specsfile=test_datafile,
                                      line_list=line_list)
@@ -31,7 +31,7 @@ class TestRVObject(unittest.TestCase):
     def test_plotting(self):
         line_list = pkg_resources.resource_filename(
             "RVFitter", "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
-        mytest = RVObject.from_specsfile_flexi(specsfile=self.test_datafile,
+        mytest = Star.from_specsfile_flexi(specsfile=self.test_datafile,
                                                id_func=id_func,
                                                line_list=line_list)
         for line in mytest.lines:
@@ -49,7 +49,7 @@ class TestRVObject(unittest.TestCase):
         line_list = pkg_resources.resource_filename(
             "RVFitter",
             "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
-        mytest = RVObject.from_specsfile(starname="B275",
+        mytest = Star.from_specsfile(starname="B275",
                                          date="20190605T07",
                                          specsfile=test_datafile,
                                          line_list=line_list)

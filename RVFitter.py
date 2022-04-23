@@ -140,9 +140,9 @@ class Line(object):
 
 class RVFitter(lmfit.Model):
     """Docstring for RVFitter. """
-    def __init__(self, specsfilelist_name, rvobjects, line_list, debug=False):
+    def __init__(self, specsfilelist_name, stars, line_list, debug=False):
         self.specsfilelist_name = specsfilelist_name
-        self.rvobjects = rvobjects
+        self.stars = stars
         self.line_list = line_list
         self.debug = debug
         self.line_names, self.line_profiles, self.wlc_windows = self._read_line_list(
@@ -151,7 +151,7 @@ class RVFitter(lmfit.Model):
         self.objective = None
         self.objective_set = False
         self.params = None
-        self.star = list(set([item.starname for item in self.rvobjects]))
+        self.star = list(set([item.starname for item in self.stars]))
         if len(self.star) != 1:
             print("You seem to mix stars! This does not make sense!")
             raise SystemExit
@@ -173,7 +173,7 @@ class RVFitter(lmfit.Model):
 
     def create_df(self):
         l_dfs = []
-        for rvobject in self.rvobjects:
+        for rvobject in self.stars:
             df = rvobject.make_dataframe()
             l_dfs.append(df)
         self.df = pd.concat(l_dfs, axis=0)
@@ -184,11 +184,11 @@ class RVFitter(lmfit.Model):
 
     def sort_by_date(self):
         """
-        sorts the rvobjects by their date
+        sorts the stars by their date
         """
-        dates = [rvo.date for rvo in self.rvobjects]
+        dates = [rvo.date for rvo in self.stars]
         sorted_index = np.argsort(dates)
-        self.rvobjects = [self.rvobjects[i] for i in sorted_index]
+        self.stars = [self.stars[i] for i in sorted_index]
 
     @classmethod
     def _read_line_list(cls, linelist):
@@ -209,20 +209,27 @@ class RVFitter(lmfit.Model):
             lines.append(this_line)
         return lines
 
-    def save_df(self):
-        self.df.to_pickle(self.df_name)
-        print('Results saved in: {filename}'.format(filename=self.df_name))
+    def save_df(self, filename=None):
+        if filename is None:
+            file_to_write = self.df_name
+        else:
+            file_to_write = filename
+        print('Results saved in: {filename}'.format(filename=file_to_write))
+        self.df.to_pickle(file_to_write)
 
-    def load_df(self):
-        print("Loading dataframe from {filename}".format(filename=self.df_name))
-        self.df = pd.read_pickle(self.df_name)
+    def load_df(self, filename=None):
+        if filename is None:
+            print("Loading dataframe from {filename}".format(filename=self.df_name))
+            self.df = pd.read_pickle(self.df_name)
+        else:
+            self.df = pd.read_pickle(filename)
 
         starnames = self.df['starname'].unique()
         dates = self.df['date'].unique()
 
         query = "(starname == '{star}') & (date == '{date}')"
 
-        rvobjects = []
+        stars = []
         for star in starnames:
             for date in dates:
                 this_query = query.format(star=star, date=date)
@@ -248,6 +255,7 @@ class RVFitter(lmfit.Model):
                     this_line.clipped_wlc    = row['clipped_wlc']
                     this_line.clipped_flux   = row['clipped_flux']
                     this_line.clipped_error  = row['clipped_error']
+                    this_line.hash           = row['line_hash']
                     this_line.got_normed     = True
                     this_line.is_clipped     = True
 
@@ -269,11 +277,11 @@ class RVFitter(lmfit.Model):
                     print("         This is not supported by the fitter!")
                     raise SystemExit
 
-                this_rvobject = RVObject(starname=star, lines=lines, date=date, wavelength=wavelengths[0],
+                this_star = Star(starname=star, lines=lines, date=date, wavelength=wavelengths[0],
                          flux=fluxes[0], flux_errors=flux_errors[0]
                          )
-                rvobjects.append(this_rvobject)
-        self.rvobjects = rvobjects
+                stars.append(this_star)
+        self.stars = stars
 
     def find_if_list_of_arrays_contains_different_arrays(self, list_of_arrays):
         """
@@ -417,14 +425,14 @@ class RVFitter(lmfit.Model):
         if debug:
             specsfilelist = specsfilelist[:2]
 
-        rvobjects = [
-            RVObject.from_specsfile_flexi(
+        stars = [
+            Star.from_specsfile_flexi(
                 specsfile=specsfile,
                 id_func=id_func,
                 datetime_formatter=datetime_formatter,
                 line_list=line_list, debug=debug) for specsfile in specsfilelist
         ]
-        return cls(specsfilelist_name=specsfilelist_name, rvobjects=rvobjects, line_list=line_list)
+        return cls(specsfilelist_name=specsfilelist_name, stars=stars, line_list=line_list)
 
     @classmethod
     def from_specsfilelist_flexi(cls,
@@ -433,18 +441,18 @@ class RVFitter(lmfit.Model):
                                  line_list,
                                  datetime_formatter="%Y%m%dT%H",
                                  debug=False):
-        rvobjects = [
-            RVObject.from_specsfile_flexi(
+        stars = [
+            Star.from_specsfile_flexi(
                 specsfile=specsfile,
                 id_func=id_func,
                 datetime_formatter=datetime_formatter,
                 line_list=line_list, debug=debug) for specsfile in specsfilelist
         ]
-        return cls(specsfile=None, rvobjects=rvobjects, line_list=line_list)
+        return cls(specsfile=None, stars=stars, line_list=line_list)
 
 
-class RVObject(object):
-    """Docstring for RVObject. """
+class Star(object):
+    """Docstring for Star. """
     def __init__(
         self,
         starname,
@@ -500,12 +508,12 @@ class RVObject(object):
                        specsfile,
                        line_list,
                        datetime_formatter="%Y%m%dT%H"):
-        """classmethod for creation of RVObject
+        """classmethod for creation of Star
         :arg1: starname - name of the star
         :arg2: date - date to be formatted into datetime object
         :arg3: specsfile - path to specsfile which should be read
 
-        :returns: RVObject
+        :returns: Star
         """
 
         wavelength, flux, flux_errors = cls._read_specsfile(specsfile)
@@ -526,12 +534,12 @@ class RVObject(object):
                              id_func,
                              datetime_formatter="%Y%m%dT%H",
                              debug=False):
-        """classmethod for creation of RVObject
+        """classmethod for creation of Star
         :arg1: specsfile - path to specsfile which should be read
         :arg2: id_func - function which processes the specsfile string and returns starname and date
         :param debug:
 
-        :returns: RVObject
+        :returns: Star
         """
         starname, date = id_func(specsfile)
 

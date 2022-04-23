@@ -1,3 +1,3 @@
-tests/test_data/B275_UVBVIS_20190605T07_barycor.nspec
-tests/test_data/B275_UVBVIS_20190606T05_barycor.nspec
-tests/test_data/B275_UVBVIS_20190709T02_barycor.nspec
+B275_UVBVIS_20190605T07_barycor.nspec
+B275_UVBVIS_20190606T05_barycor.nspec
+B275_UVBVIS_20190709T02_barycor.nspec
