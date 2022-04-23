@@ -5,6 +5,7 @@ from scipy.interpolate import splrep, splev
 import lmfit
 import hashlib
 import pandas as pd
+import astropy.units as u
 
 # TODO: add a unique identifier for a line which can be used as key for parameters
 
@@ -41,6 +42,24 @@ class Line(object):
             name=self.line_name,
             profile=self.line_profile,
             wlc_window=self.wlc_window)
+
+    @property
+    def normed_wlc_to_velocity(self):
+        if self.normed_wlc is None:
+            return None
+        else:
+            return self.wave_to_vel(self.normed_wlc, self.line_profile)
+
+    @property
+    def clipped_wlc_to_velocity(self):
+        if self.clipped_wlc is None:
+            return None
+        else:
+            return self.wave_to_vel(self.clipped_wlc, self.line_profile)
+
+    def wave_to_vel(self, wavelength, w0):
+        vel = (c.to(u.km/u.s).value * ((wavelength - w0) / w0))
+        return vel
 
     def add_normed_spectrum(self, angstrom, flux, error, leftValueNorm,
                             rightValueNorm):
