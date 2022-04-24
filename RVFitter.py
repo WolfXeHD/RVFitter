@@ -18,7 +18,8 @@ class Line(object):
         self.line_profile = line_profile
         self.wlc_window = wlc_window
 
-        hash_object = hashlib.md5(self.line_name.encode() + str(np.random.rand(1)).encode())
+        hash_object = hashlib.md5(self.line_name.encode() +
+                                  str(np.random.rand(1)).encode())
         self.hash = hash_object.hexdigest()[:10]
         self._clear()
 
@@ -52,6 +53,13 @@ class Line(object):
             return self.wave_to_vel(self.normed_wlc, self.line_profile)
 
     @property
+    def clipped_error_to_velocity(self):
+        if self.clipped_error is None:
+            return None
+        else:
+            return self.wave_to_vel(self.clipped_error, self.line_profile)
+
+    @property
     def clipped_wlc_to_velocity(self):
         if self.clipped_wlc is None:
             return None
@@ -59,7 +67,7 @@ class Line(object):
             return self.wave_to_vel(self.clipped_wlc, self.line_profile)
 
     def wave_to_vel(self, wavelength, w0):
-        vel = (const.c.to(u.km/u.s).value * ((wavelength - w0) / w0))
+        vel = (const.c.to(u.km / u.s).value * ((wavelength - w0) / w0))
         return vel
 
     def add_normed_spectrum(self, angstrom, flux, error, leftValueNorm,
@@ -92,7 +100,7 @@ class Line(object):
             self.rightClip.append(rightClip)
 
             masking = (self.clipped_wlc > leftClip) & (self.clipped_wlc <
-                                                           rightClip)
+                                                       rightClip)
             self.clipped_wlc = self.clipped_wlc[~masking]
             self.clipped_flux = self.clipped_flux[~masking]
             self.is_clipped = True
@@ -126,7 +134,8 @@ class Line(object):
         ax.axhline(y=1, linestyle='-.', color='black')
         ax.set_xlabel(r'wavelength ($\AA$)')
         ax.set_ylabel('flux')
-        title = self.line_name + ' ' + str("%.0f" % self.line_profile) + ' (clipped)'
+        title = self.line_name + ' ' + str(
+            "%.0f" % self.line_profile) + ' (clipped)'
         if title_prefix == None:
             ax.set_title(title)
         else:
@@ -157,11 +166,13 @@ class Line(object):
         ax.axhline(y=1, linestyle='-.', color='black')
         ax.set_xlabel(r'wavelength ($\AA$)')
         ax.set_ylabel('flux')
-        title = self.line_name + ' ' + str("%.0f" % self.line_profile) + ' (normalized)'
+        title = self.line_name + ' ' + str(
+            "%.0f" % self.line_profile) + ' (normalized)'
         if title_prefix == None:
             ax.set_title(title)
         else:
             ax.set_title(title_prefix + title)
+
 
 class RVFitter(lmfit.Model):
     """Docstring for RVFitter. """
@@ -188,6 +199,7 @@ class RVFitter(lmfit.Model):
         self.fwhm_base = 'fwhm_line_{name}_epoch{epoch}'
         self.cen_base = 'cen_line_{name}_epoch_{epoch}'
         self.amp_base = 'amp_line_{name}_epoch_{epoch}'
+        self.df = None
 
     @property
     def df_name(self):
@@ -243,13 +255,28 @@ class RVFitter(lmfit.Model):
         print('Results saved in: {filename}'.format(filename=file_to_write))
         self.df.to_pickle(file_to_write)
 
-    def load_df(self, filename=None):
+    @classmethod
+    def create_fitter_from_df(cls):
+        pass
+
+    # TODO: shouldn't this be a classmethod?
+    def load_df(self, filename=None, df=None):
+        if filename is not None and df is not None:
+            print("You cannot load a dataframe and specify a filename!")
+            raise SystemExit
+
         if filename is None:
             file_to_read = self.df_name
         else:
             file_to_read = filename
-        print("Loading dataframe from {filename}".format(filename=file_to_read))
-        self.df = pd.read_pickle(file_to_read)
+
+        if df is not None:
+            self.df = df
+            print("Using the dataframe you passed in.")
+        else:
+            self.df = pd.read_pickle(file_to_read)
+            print("Loading dataframe from {filename}".format(
+                filename=file_to_read))
 
         starnames = self.df['starname'].unique()
         dates = self.df['date'].unique()
@@ -269,47 +296,60 @@ class RVFitter(lmfit.Model):
 
                 for idx, row in this_df.iterrows():
                     this_line = Line(line_name=row['line_name'],
-                         line_profile=row['line_profile'],
-                         wlc_window=row['wlc_window'])
+                                     line_profile=row['line_profile'],
+                                     wlc_window=row['wlc_window'])
 
-                    this_line.normed_wlc     = row['normed_wlc']
-                    this_line.normed_flux    = row['normed_flux']
-                    this_line.normed_errors  = row['normed_errors']
-                    this_line.leftValueNorm  = row['leftValueNorm']
+                    this_line.normed_wlc = row['normed_wlc']
+                    this_line.normed_flux = row['normed_flux']
+                    this_line.normed_errors = row['normed_errors']
+                    this_line.leftValueNorm = row['leftValueNorm']
                     this_line.rightValueNorm = row['rightValueNorm']
-                    this_line.leftClip       = row['leftClip']
-                    this_line.rightClip      = row['rightClip']
-                    this_line.clipped_wlc    = row['clipped_wlc']
-                    this_line.clipped_flux   = row['clipped_flux']
-                    this_line.clipped_error  = row['clipped_error']
-                    this_line.hash           = row['line_hash']
-                    this_line.got_normed     = True
-                    this_line.is_clipped     = True
+                    this_line.leftClip = row['leftClip']
+                    this_line.rightClip = row['rightClip']
+                    this_line.clipped_wlc = row['clipped_wlc']
+                    this_line.clipped_flux = row['clipped_flux']
+                    this_line.clipped_error = row['clipped_error']
+                    this_line.hash = row['line_hash']
+                    this_line.got_normed = True
+                    this_line.is_clipped = True
 
                     lines.append(this_line)
                     fluxes.append(row["flux"])
                     wavelengths.append(row["wavelength"])
                     flux_errors.append(row["flux_error"])
 
-                if self.find_if_list_of_arrays_contains_different_arrays(fluxes):
-                    print("WARNING: There are different fluxes for the same line!")
+                if self.find_if_list_of_arrays_contains_different_arrays(
+                        fluxes):
+                    print(
+                        "WARNING: There are different fluxes for the same line!"
+                    )
                     print("         This is not supported by the fitter!")
                     raise SystemExit
-                if self.find_if_list_of_arrays_contains_different_arrays(wavelengths):
-                    print("WARNING: There are different wavelengths for the same line!")
+                if self.find_if_list_of_arrays_contains_different_arrays(
+                        wavelengths):
+                    print(
+                        "WARNING: There are different wavelengths for the same line!"
+                    )
                     print("         This is not supported by the fitter!")
                     raise SystemExit
-                if self.find_if_list_of_arrays_contains_different_arrays(flux_errors):
-                    print("WARNING: There are different flux errors for the same line!")
+                if self.find_if_list_of_arrays_contains_different_arrays(
+                        flux_errors):
+                    print(
+                        "WARNING: There are different flux errors for the same line!"
+                    )
                     print("         This is not supported by the fitter!")
                     raise SystemExit
 
-                this_star = Star(starname=star, lines=lines, date=date, wavelength=wavelengths[0],
-                         flux=fluxes[0], flux_errors=flux_errors[0]
-                         )
+                this_star = Star(starname=star,
+                                 lines=lines,
+                                 date=date,
+                                 wavelength=wavelengths[0],
+                                 flux=fluxes[0],
+                                 flux_errors=flux_errors[0])
                 this_star.df = this_df
                 stars.append(this_star)
         self.stars = stars
+        self.setup_parameters()
 
     def find_if_list_of_arrays_contains_different_arrays(self, list_of_arrays):
         """
@@ -355,41 +395,62 @@ class RVFitter(lmfit.Model):
     def print_fit_result(self):
         output_file = 'Params_' + self.star + '.dat'
 
+        print("Write parameters to file: {filename}".format(
+            filename=output_file))
         with open(output_file, 'w') as file:
             for _, row in self.df.iterrows():
                 line_profile = row["line_profile"]
-                amplitude, err_amplitude = round(self.result.params[row["parameters"]["amp"]].value, 4), round(
-                    self.result.params[row["parameters"]["amp"]].stderr, 4)
-                sigma, err_sigma = round(self.result.params[row["parameters"]["sig"]].value, 4), round(
-                    self.result.params[row["parameters"]["sig"]].stderr, 4)
-                fwhm, err_fwhm = round(self.result.params[row["parameters"]["fwhm"]].value, 4), round(
-                    self.result.params[row["parameters"]["fwhm"]].stderr, 4)
-                centroid, err_centroid = round(self.result.params[row["parameters"]["cen"]].value, 4), round(
-                    self.result.params[row["parameters"]["cen"]].stderr, 4)
+                amplitude, err_amplitude = round(
+                    self.result.params[row["parameters"]["amp"]].value,
+                    4), round(
+                        self.result.params[row["parameters"]["amp"]].stderr, 4)
+                sigma, err_sigma = round(
+                    self.result.params[row["parameters"]["sig"]].value,
+                    4), round(
+                        self.result.params[row["parameters"]["sig"]].stderr, 4)
+                fwhm, err_fwhm = round(
+                    self.result.params[row["parameters"]["fwhm"]].value,
+                    4), round(
+                        self.result.params[row["parameters"]["fwhm"]].stderr,
+                        4)
+                centroid, err_centroid = round(
+                    self.result.params[row["parameters"]["cen"]].value,
+                    4), round(
+                        self.result.params[row["parameters"]["cen"]].stderr, 4)
                 #  vsini, err_vsini = round(vsini_constant * fwhm, 4), round(vsini_constant * err_fwhm, 4)
-                height, err_height = round(0.3183099 * amplitude / max(1.e-15, sigma), 4), round(
-                    0.3183099 * err_amplitude / max(1.e-15, sigma), 4)
-                print('-----------', row["line_name"] + ' ' + str(line_profile), '-----------')
+                height, err_height = round(
+                    0.3183099 * amplitude / max(1.e-15, sigma),
+                    4), round(0.3183099 * err_amplitude / max(1.e-15, sigma),
+                              4)
+                print('-----------',
+                      row["line_name"] + ' ' + str(line_profile),
+                      '-----------')
                 print('Amplitude= ', '\t', amplitude, ' +/-\t', err_amplitude)
                 print('Height= ', '\t', height, ' +/-\t', err_height)
                 #            print 'FWHM=     ','\t',fwhm,' +/-\t',err_fwhm
                 print('Sigma=     ', '\t', sigma, ' +/-\t', err_sigma)
                 print('Centroid=     ', '\t', centroid, ' +/-\t', err_centroid)
-                print('RV=     ', '\t', const.c * ((centroid - line_profile) / line_profile), ' +/-\t',
-                      (err_centroid / centroid) * const.c)
+                print('RV=     ', '\t',
+                      const.c * ((centroid - line_profile) / line_profile),
+                      ' +/-\t', (err_centroid / centroid) * const.c)
                 #            print 'vsini=        ','\t',vsini,' +/-\t',err_vsini
 
                 file.write('\n')
-                file.write('Line profile ' + row["line_name"] + '\t' + str(line_profile) + '\n')
+                file.write('Line profile ' + row["line_name"] + '\t' +
+                           str(line_profile) + '\n')
                 #            file.write('Amplitude '+'\t'+str(amplitude)+'\t'+str(err_amplitude)+'\n')
-                file.write('Amplitude ' + '\t' + str(height) + '\t' + str(err_height) + '\n')
+                file.write('Amplitude ' + '\t' + str(height) + '\t' +
+                           str(err_height) + '\n')
                 #            file.write('FWHM '+'\t'+str(fwhm)+'\t'+str(err_fwhm)+'\n')
-                file.write('sigma ' + '\t' + str(sigma) + '\t' + str(err_sigma) + '\n')
-                file.write('centroid ' + '\t' + str(centroid) + '\t' + str(err_centroid) + '\n')
-                file.write('RV_line ' + '\t' + str(((centroid - line_profile) / line_profile) * 299792.458) + '\t' + str(
-                    (err_centroid / centroid) * 299792.458) + '\n')
+                file.write('sigma ' + '\t' + str(sigma) + '\t' +
+                           str(err_sigma) + '\n')
+                file.write('centroid ' + '\t' + str(centroid) + '\t' +
+                           str(err_centroid) + '\n')
+                file.write('RV_line ' + '\t' + str((
+                    (centroid - line_profile) / line_profile) * 299792.458) +
+                           '\t' + str((err_centroid / centroid) * 299792.458) +
+                           '\n')
             #           file.write('vsini '+'\t'+str(vsini)+'\t'+str(err_vsini)+'\n')
-
 
     def run_fit(self):
         if self.objective_set is False:
@@ -400,27 +461,38 @@ class RVFitter(lmfit.Model):
                                      self.params,
                                      args=([self.df]))
 
+    def get_df_from_star(self, name, date):
+        query = "starname == '{name}' & date == '{date}'".format(name=name,
+                                                                 date=date)
+        this_df = self.df.query(query)
+        if len(this_df) == 0:
+            print("No data for star {name} on {date}".format(name=name,
+                                                             date=date))
+        return this_df
 
     @classmethod
     def from_specsfilelist_name_flexi(cls,
-                                 specsfilelist_name,
-                                 id_func,
-                                 line_list,
-                                 datetime_formatter="%Y%m%dT%H",
-                                 debug=False):
+                                      specsfilelist_name,
+                                      id_func,
+                                      line_list,
+                                      datetime_formatter="%Y%m%dT%H",
+                                      debug=False):
         with open(specsfilelist_name, 'r') as f:
             specsfilelist = f.read().splitlines()
         if debug:
             specsfilelist = specsfilelist[:2]
 
         stars = [
-            Star.from_specsfile_flexi(
-                specsfile=specsfile,
-                id_func=id_func,
-                datetime_formatter=datetime_formatter,
-                line_list=line_list, debug=debug) for specsfile in specsfilelist
+            Star.from_specsfile_flexi(specsfile=specsfile,
+                                      id_func=id_func,
+                                      datetime_formatter=datetime_formatter,
+                                      line_list=line_list,
+                                      debug=debug)
+            for specsfile in specsfilelist
         ]
-        return cls(specsfilelist_name=specsfilelist_name, stars=stars, line_list=line_list)
+        return cls(specsfilelist_name=specsfilelist_name,
+                   stars=stars,
+                   line_list=line_list)
 
     @classmethod
     def from_specsfilelist_flexi(cls,
@@ -430,11 +502,12 @@ class RVFitter(lmfit.Model):
                                  datetime_formatter="%Y%m%dT%H",
                                  debug=False):
         stars = [
-            Star.from_specsfile_flexi(
-                specsfile=specsfile,
-                id_func=id_func,
-                datetime_formatter=datetime_formatter,
-                line_list=line_list, debug=debug) for specsfile in specsfilelist
+            Star.from_specsfile_flexi(specsfile=specsfile,
+                                      id_func=id_func,
+                                      datetime_formatter=datetime_formatter,
+                                      line_list=line_list,
+                                      debug=debug)
+            for specsfile in specsfilelist
         ]
         return cls(specsfile=None, stars=stars, line_list=line_list)
 
@@ -458,6 +531,7 @@ class Star(object):
         self.flux_errors = flux_errors
         self.date_time_obj = datetime.strptime(self.date, datetime_formatter)
         self.lines = lines
+        self.parameters = {}
 
     def get_line_by_hash(self, hash):
         for line in self.lines:
@@ -472,7 +546,6 @@ class Star(object):
     def apply_selecting(self, standard_epoch):
         for line, standard_line in zip(self.lines, standard_epoch.lines):
             line.is_selected = standard_line.is_selected
-
 
     @property
     def angstrom(self):
@@ -622,6 +695,12 @@ class Star(object):
                 dict_for_df["clipped_flux"] = [np.array(line.clipped_flux)]
                 dict_for_df["clipped_error"] = [np.array(line.clipped_error)]
                 dict_for_df["line_hash"] = line.hash
+                dict_for_df["clipped_error_to_velocity"] = [
+                    np.array(line.clipped_error_to_velocity)
+                ]
+                dict_for_df["clipped_wlc_to_velocity"] = [
+                    np.array(line.clipped_wlc_to_velocity)
+                ]
 
                 this_df = pd.DataFrame.from_dict(dict_for_df)
                 df = df.append(this_df)
@@ -673,4 +752,6 @@ class Star(object):
                     name=row["line_hash"], epoch=row["date"]))
             d["fwhm"] = fwhm
             l_parameter_names.append(d)
+        if "parameters" in self.df.columns:
+            del self.df["parameters"]
         self.df["parameters"] = l_parameter_names
