@@ -7,6 +7,7 @@ import hashlib
 import pandas as pd
 import astropy.units as u
 import astropy.constants as const
+import numpy as np
 
 # TODO: add a unique identifier for a line which can be used as key for parameters
 
@@ -17,7 +18,7 @@ class Line(object):
         self.line_profile = line_profile
         self.wlc_window = wlc_window
 
-        hash_object = hashlib.md5(self.line_name.encode())
+        hash_object = hashlib.md5(self.line_name.encode() + str(np.random.rand(1)).encode())
         self.hash = hash_object.hexdigest()[:10]
         self._clear()
 
@@ -84,6 +85,9 @@ class Line(object):
             print("You cannot clip before you normalize!")
             raise SystemExit
         else:
+            if leftClip > rightClip:
+                leftClip, rightClip = rightClip, leftClip
+
             self.leftClip.append(leftClip)
             self.rightClip.append(rightClip)
 
@@ -192,11 +196,12 @@ class RVFitter(lmfit.Model):
         else:
             return self.specsfilelist_name.replace('.txt', '_DEBUG.pkl')
 
-    def create_df(self):
+    def create_df(self, make=True):
         l_dfs = []
         for star in self.stars:
-            df = star.make_dataframe()
-            l_dfs.append(df)
+            if make:
+                star.make_dataframe()
+            l_dfs.append(star.df)
         self.df = pd.concat(l_dfs, axis=0)
 
     def set_objective(self, objective):
@@ -240,10 +245,11 @@ class RVFitter(lmfit.Model):
 
     def load_df(self, filename=None):
         if filename is None:
-            print("Loading dataframe from {filename}".format(filename=self.df_name))
-            self.df = pd.read_pickle(self.df_name)
+            file_to_read = self.df_name
         else:
-            self.df = pd.read_pickle(filename)
+            file_to_read = filename
+        print("Loading dataframe from {filename}".format(filename=file_to_read))
+        self.df = pd.read_pickle(file_to_read)
 
         starnames = self.df['starname'].unique()
         dates = self.df['date'].unique()
@@ -301,6 +307,7 @@ class RVFitter(lmfit.Model):
                 this_star = Star(starname=star, lines=lines, date=date, wavelength=wavelengths[0],
                          flux=fluxes[0], flux_errors=flux_errors[0]
                          )
+                this_star.df = this_df
                 stars.append(this_star)
         self.stars = stars
 
@@ -317,54 +324,19 @@ class RVFitter(lmfit.Model):
                     return True
             return False
 
-
     def setup_parameters(self):
-        "Step 4. Fit gaussian by using lmfit"
-        self.params = lmfit.Parameters()
-        "Initialise variables ..."
-        l_parameter_names = []
-        for _, row in self.df.iterrows():
-            d = dict()
-            amplitude = 'amp_line_{name}_epoch_{epoch}'.format(
-                name=row["line_hash"], epoch=row["date"])
+        l_params = []
+        for star in self.stars:
+            star.setup_parameters()
+            l_params.append(star.params)
+        self.create_df(make=False)
+        self.merge_parameters()
 
-            self.params.add(amplitude, value=0.5,
-                            vary=True)  # , min=0.01,max=1.0
-            d["amp"] = amplitude
-
-            cen = 'cen_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
-                                                         epoch=row["date"])
-            self.params.add(cen, value=row["line_profile"],
-                            vary=True)  # , min=0.01,max=1.0
-            d["cen"] = cen
-            sig = 'sig_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
-                                                         epoch=row["date"])
-            self.params.add(sig, value=0.3, vary=True)  # , min=0.01,max=1.0
-            d["sig"] = sig
-            rv_shift = 'rv_shift_line_{name}_epoch_{epoch}'.format(
-                name=row["line_hash"], epoch=row["date"])
-            self.params.add(
-                rv_shift,
-                value=200,
-                vary=True,
-                expr=
-                '299792.458*(cen_line_{name}_epoch_{epoch} - {profile:4.2f})/{profile:4.2f}'
-                .format(name=row["line_hash"],
-                        epoch=row["date"],
-                        profile=row["line_profile"]
-                        ))  # , min = 0.)  # , min=0.01,max=1.0
-            d["rv_shift"] = rv_shift
-            fwhm = 'fwhm_line_{name}_epoch{epoch}'.format(
-                name=row["line_hash"], epoch=row["date"])
-            self.params.add(
-                fwhm,
-                value=2.0,
-                vary=True,
-                expr='2.3548200*sig_line_{name}_epoch_{epoch}'.format(
-                    name=row["line_hash"], epoch=row["date"]))
-            d["fwhm"] = fwhm
-            l_parameter_names.append(d)
-        self.df["parameters"] = l_parameter_names
+    def merge_parameters(self):
+        params = lmfit.Parameters()
+        for star in self.stars:
+            params.update(star.params)
+        self.params = params
 
     def get_parameters(self, group):
         l_parameter = []
@@ -382,53 +354,48 @@ class RVFitter(lmfit.Model):
 
     def print_fit_result(self):
         output_file = 'Params_' + self.star + '.dat'
-        file = open(output_file, 'w')
 
-        for _, row in self.df.iterrows():
-            line_profile = row["line_profile"]
-            #  vsini_constant = c / (2 * line_profile * pow(np.log(2), 0.5))
+        with open(output_file, 'w') as file:
+            for _, row in self.df.iterrows():
+                line_profile = row["line_profile"]
+                amplitude, err_amplitude = round(self.result.params[row["parameters"]["amp"]].value, 4), round(
+                    self.result.params[row["parameters"]["amp"]].stderr, 4)
+                sigma, err_sigma = round(self.result.params[row["parameters"]["sig"]].value, 4), round(
+                    self.result.params[row["parameters"]["sig"]].stderr, 4)
+                fwhm, err_fwhm = round(self.result.params[row["parameters"]["fwhm"]].value, 4), round(
+                    self.result.params[row["parameters"]["fwhm"]].stderr, 4)
+                centroid, err_centroid = round(self.result.params[row["parameters"]["cen"]].value, 4), round(
+                    self.result.params[row["parameters"]["cen"]].stderr, 4)
+                #  vsini, err_vsini = round(vsini_constant * fwhm, 4), round(vsini_constant * err_fwhm, 4)
+                height, err_height = round(0.3183099 * amplitude / max(1.e-15, sigma), 4), round(
+                    0.3183099 * err_amplitude / max(1.e-15, sigma), 4)
+                print('-----------', row["line_name"] + ' ' + str(line_profile), '-----------')
+                print('Amplitude= ', '\t', amplitude, ' +/-\t', err_amplitude)
+                print('Height= ', '\t', height, ' +/-\t', err_height)
+                #            print 'FWHM=     ','\t',fwhm,' +/-\t',err_fwhm
+                print('Sigma=     ', '\t', sigma, ' +/-\t', err_sigma)
+                print('Centroid=     ', '\t', centroid, ' +/-\t', err_centroid)
+                print('RV=     ', '\t', const.c * ((centroid - line_profile) / line_profile), ' +/-\t',
+                      (err_centroid / centroid) * const.c)
+                #            print 'vsini=        ','\t',vsini,' +/-\t',err_vsini
 
-            #        print 'line 4 read= ',ix+1,' -- ',line_profile
-            #        for iy, y in enumerate(fileContent): # iterate over number of epochs
-            iy = 0
-            amplitude, err_amplitude = round(self.result.params[row["parameters"]["amp"]].value, 4), round(
-                self.result.params[row["parameters"]["amp"]].stderr, 4)
-            sigma, err_sigma = round(self.result.params[row["parameters"]["sig"]].value, 4), round(
-                self.result.params[row["parameters"]["sig"]].stderr, 4)
-            fwhm, err_fwhm = round(self.result.params[row["parameters"]["fwhm"]].value, 4), round(
-                self.result.params[row["parameters"]["fwhm"]].stderr, 4)
-            centroid, err_centroid = round(self.result.params[row["parameters"]["cen"]].value, 4), round(
-                self.result.params[row["parameters"]["cen"]].stderr, 4)
-            #  vsini, err_vsini = round(vsini_constant * fwhm, 4), round(vsini_constant * err_fwhm, 4)
-            height, err_height = round(0.3183099 * amplitude / max(1.e-15, sigma), 4), round(
-                0.3183099 * err_amplitude / max(1.e-15, sigma), 4)
-            print('-----------', row["line_name"] + ' ' + str(line_profile), '-----------')
-            print('Amplitude= ', '\t', amplitude, ' +/-\t', err_amplitude)
-            print('Height= ', '\t', height, ' +/-\t', err_height)
-            #            print 'FWHM=     ','\t',fwhm,' +/-\t',err_fwhm
-            print('Sigma=     ', '\t', sigma, ' +/-\t', err_sigma)
-            print('Centroid=     ', '\t', centroid, ' +/-\t', err_centroid)
-            print('RV=     ', '\t', c * ((centroid - line_profile) / line_profile), ' +/-\t',
-                  (err_centroid / centroid) * c)
-            #            print 'vsini=        ','\t',vsini,' +/-\t',err_vsini
+                file.write('\n')
+                file.write('Line profile ' + row["line_name"] + '\t' + str(line_profile) + '\n')
+                #            file.write('Amplitude '+'\t'+str(amplitude)+'\t'+str(err_amplitude)+'\n')
+                file.write('Amplitude ' + '\t' + str(height) + '\t' + str(err_height) + '\n')
+                #            file.write('FWHM '+'\t'+str(fwhm)+'\t'+str(err_fwhm)+'\n')
+                file.write('sigma ' + '\t' + str(sigma) + '\t' + str(err_sigma) + '\n')
+                file.write('centroid ' + '\t' + str(centroid) + '\t' + str(err_centroid) + '\n')
+                file.write('RV_line ' + '\t' + str(((centroid - line_profile) / line_profile) * 299792.458) + '\t' + str(
+                    (err_centroid / centroid) * 299792.458) + '\n')
+            #           file.write('vsini '+'\t'+str(vsini)+'\t'+str(err_vsini)+'\n')
 
-            file.write('\n')
-            file.write('Line profile ' + row["line_name"] + '\t' + str(line_profile) + '\n')
-            #            file.write('Amplitude '+'\t'+str(amplitude)+'\t'+str(err_amplitude)+'\n')
-            file.write('Amplitude ' + '\t' + str(height) + '\t' + str(err_height) + '\n')
-            #            file.write('FWHM '+'\t'+str(fwhm)+'\t'+str(err_fwhm)+'\n')
-            file.write('sigma ' + '\t' + str(sigma) + '\t' + str(err_sigma) + '\n')
-            file.write('centroid ' + '\t' + str(centroid) + '\t' + str(err_centroid) + '\n')
-            file.write('RV_line ' + '\t' + str(((centroid - line_profile) / line_profile) * 299792.458) + '\t' + str(
-                (err_centroid / centroid) * 299792.458) + '\n')
-        #           file.write('vsini '+'\t'+str(vsini)+'\t'+str(err_vsini)+'\n')
-
-        file.close()
 
     def run_fit(self):
         if self.objective_set is False:
             print("You did not specify an objective function!")
             raise SystemExit
+        # TODO: minimize can also take kwargs --> can be used to set line-shape
         self.result = lmfit.minimize(self.objective,
                                      self.params,
                                      args=([self.df]))
@@ -629,9 +596,6 @@ class Star(object):
             lines.append(this_line)
         return lines
 
-    def get_line_from_row(self):
-        pass
-
     def make_dataframe(self):
         df = pd.DataFrame()
         dict_for_df = dict()
@@ -661,4 +625,52 @@ class Star(object):
 
                 this_df = pd.DataFrame.from_dict(dict_for_df)
                 df = df.append(this_df)
-        return df
+        self.df = df
+
+    def setup_parameters(self):
+        "Step 4. Fit gaussian by using lmfit"
+        self.params = lmfit.Parameters()
+        "Initialise variables ..."
+        l_parameter_names = []
+        for _, row in self.df.iterrows():
+            d = dict()
+            amplitude = 'amp_line_{name}_epoch_{epoch}'.format(
+                name=row["line_hash"], epoch=row["date"])
+
+            self.params.add(amplitude, value=0.5,
+                            vary=True)  # , min=0.01,max=1.0
+            d["amp"] = amplitude
+
+            cen = 'cen_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
+                                                         epoch=row["date"])
+            self.params.add(cen, value=row["line_profile"],
+                            vary=True)  # , min=0.01,max=1.0
+            d["cen"] = cen
+            sig = 'sig_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
+                                                         epoch=row["date"])
+            self.params.add(sig, value=0.3, vary=True)  # , min=0.01,max=1.0
+            d["sig"] = sig
+            rv_shift = 'rv_shift_line_{name}_epoch_{epoch}'.format(
+                name=row["line_hash"], epoch=row["date"])
+            self.params.add(
+                rv_shift,
+                value=200,
+                vary=True,
+                expr=
+                '299792.458*(cen_line_{name}_epoch_{epoch} - {profile:4.2f})/{profile:4.2f}'
+                .format(name=row["line_hash"],
+                        epoch=row["date"],
+                        profile=row["line_profile"]
+                        ))  # , min = 0.)  # , min=0.01,max=1.0
+            d["rv_shift"] = rv_shift
+            fwhm = 'fwhm_line_{name}_epoch{epoch}'.format(
+                name=row["line_hash"], epoch=row["date"])
+            self.params.add(
+                fwhm,
+                value=2.0,
+                vary=True,
+                expr='2.3548200*sig_line_{name}_epoch_{epoch}'.format(
+                    name=row["line_hash"], epoch=row["date"]))
+            d["fwhm"] = fwhm
+            l_parameter_names.append(d)
+        self.df["parameters"] = l_parameter_names
