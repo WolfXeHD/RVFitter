@@ -2,6 +2,7 @@ import unittest
 import pkg_resources
 import os
 import numpy as np
+import copy
 
 from RVFitter import RVFitter
 
@@ -23,11 +24,21 @@ def objective(params, df):
     return np.array(resid)
 
 
-def gauss(x, amp, cen, sigma):
-    #    "basic gaussian"
-    #    return 1-amp*np.exp(-(x-cen)**2/(2.*sigma**2))
-    "basic lorentzian"
-    return 1 - (amp / (1 + ((1.0 * x - cen) / sigma)**2)) / (np.pi * sigma)
+def shape(x, amp, cen, sigma, type="lorentzian"):
+    if type == "gaussian":
+        return 1 - amp * np.exp(-(x - cen) ** 2 / (2 * sigma ** 2))
+    elif type == "lorentzian":
+        return 1 - amp * (1 / (1 + ((x - cen) / sigma) ** 2))
+    elif type == "voigt":
+        raise NotImplementedError
+        #  return amp * (1 / (1 + ((x - cen) / sigma) ** 2)) + \
+        #      amp * (1 / (1 + ((x - cen - 2 * sigma) / sigma) ** 2))
+    else:
+        raise ValueError("Unknown shape type")
+    #  #    "basic gaussian"
+    #  #    return 1-amp*np.exp(-(x-cen)**2/(2.*sigma**2))
+    #  "basic lorentzian"
+    #  return 1 - (amp / (1 + ((1.0 * x - cen) / sigma)**2)) / (np.pi * sigma)
 
 
 def model(params, row):
@@ -35,8 +46,9 @@ def model(params, row):
     amp = params[par_names["amp"]]
     cen = params[par_names["cen"]]
     sig = params[par_names["sig"]]
+    #  x = row["clipped_wlc_to_velocity"]
     x = row["clipped_wlc"]
-    return gauss(x, amp, cen, sig)
+    return shape(x, amp, cen, sig)
 
 
 def get_tmp_file(filename):
@@ -89,10 +101,35 @@ class TestRVFitter(unittest.TestCase):
         self.myfitter.run_fit()
         self.myfitter.print_fit_result()
 
-        #  for _, row in myfitter.df.iterrows():
-        #      plt.plot(row["clipped_wlc"], row["clipped_flux"])
-        #      plt.plot(row["clipped_wlc"], gauss(row["clipped_wlc"]))
-        #      plt.show()
+    def test_single_star_fitting(self):
+        filename = os.path.join(os.path.dirname(self.specsfilelist),
+                                "B111_speclist_Tim.pkl")
+        self.myfitter.load_df(filename=filename)
+        starnames = self.myfitter.df["starname"].unique()
+        dates = self.myfitter.df["date"].unique()
+
+        for starname in starnames:
+            for date in dates:
+                star_df = self.myfitter.get_df_from_star(name=starname,
+                                                         date=date)
+                try:
+                    this_fitter = copy.deepcopy(self.myfitter)
+                    this_fitter.load_df(df=star_df)
+                    #  this_fitter.setup_parameters()
+                    this_fitter.constrain_parameters(group="amp")
+                    this_fitter.set_objective(objective)
+                    this_fitter.run_fit()
+                    this_fitter.print_fit_result()
+
+                    this_fitter = copy.deepcopy(self.myfitter)
+                    this_fitter.load_df(df=star_df)
+                    #  this_fitter.setup_parameters()
+                    #  this_fitter.constrain_parameters(group="amp")
+                    this_fitter.set_objective(objective)
+                    this_fitter.run_fit()
+                    this_fitter.print_fit_result()
+                except:
+                    print("Failed to fit {} with date {}".format(starname, date))
 
     def test_loading_from_df(self):
         filename = os.path.join(os.path.dirname(self.specsfilelist),
