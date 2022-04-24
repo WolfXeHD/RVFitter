@@ -1,11 +1,7 @@
 import unittest
 import pkg_resources
 import os
-import glob
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import ipdb
 
 from RVFitter import RVFitter
 
@@ -23,7 +19,7 @@ def objective(params, df):
     in a 2-D array, and modeled by Gaussian functions"""
     resid = []
     for _, row in df.iterrows():
-        resid.extend((row["clipped_flux"] - gauss_dataset(params, row)))
+        resid.extend((row["clipped_flux"] - model(params, row)))
     return np.array(resid)
 
 
@@ -34,7 +30,7 @@ def gauss(x, amp, cen, sigma):
     return 1 - (amp / (1 + ((1.0 * x - cen) / sigma)**2)) / (np.pi * sigma)
 
 
-def gauss_dataset(params, row):
+def model(params, row):
     par_names = row["parameters"]
     amp = params[par_names["amp"]]
     cen = params[par_names["cen"]]
@@ -87,11 +83,11 @@ class TestRVFitter(unittest.TestCase):
 
         self.myfitter.create_df()
         self.myfitter.setup_parameters()
-        self.myfitter.constrain_parameters(group="sig")
-        #  self.myfitter.constrain_parameters(group="amp")
+        #  self.myfitter.constrain_parameters(group="sig")
+        #  #  self.myfitter.constrain_parameters(group="amp")
         self.myfitter.set_objective(objective)
         self.myfitter.run_fit()
-        #  self.myfitter.print_fit_result()
+        self.myfitter.print_fit_result()
 
         #  for _, row in myfitter.df.iterrows():
         #      plt.plot(row["clipped_wlc"], row["clipped_flux"])
@@ -103,14 +99,12 @@ class TestRVFitter(unittest.TestCase):
                                 "B111_speclist_Tim.pkl")
         self.myfitter.load_df(filename=filename)
 
-        for star_idx, star in enumerate(self.myfitter.stars):
+        for star in self.myfitter.stars:
             query = "(starname == '{starname}') & (date == '{date}')".format(
                 starname=star.starname, date=star.date)
             this_df = self.myfitter.df.query(query)
-            #  (self.myfitter.df["starname"] == star.starname)
-            #  & (self.myfitter.df["date"] == star.date)]
             self.assertEqual(len(this_df), len(star.lines))
-            # iterate over rows in dataframe
+
             for (_, row), line in zip(this_df.iterrows(), star.lines):
                 self.assertEqual(line.line_name, row["line_name"])
                 self.assertEqual(line.line_profile, row["line_profile"])
@@ -121,10 +115,10 @@ class TestRVFitter(unittest.TestCase):
                                  row['normed_flux'].any())
                 self.assertEqual(line.normed_errors.any(),
                                  row['normed_errors'].any())
+                self.assertEqual(line.leftValueNorm  , row['leftValueNorm'])
 
                 # TODO check what is happening with these two tests
-                #  self.assertEqual(line.leftValueNorm  , row['leftValueNorm'])
-                #  self.assertEqual(line.rightValueNorm , row['rightValueNorm'])
+                #    self.assertEqual(line.rightValueNorm , row['rightValueNorm'])
                 self.assertEqual(line.leftClip, row['leftClip'])
                 self.assertEqual(line.rightClip, row['rightClip'])
                 self.assertEqual(line.clipped_wlc.any(),
