@@ -88,6 +88,15 @@ class Line(object):
         self.clipped_wlc = self.normed_wlc
         self.clipped_flux = self.normed_flux
 
+        masker = (self.clipped_wlc < (self.line_profile + self.wlc_window)) & (
+            self.clipped_wlc > (self.line_profile - self.wlc_window))
+        # get indices from array of wavelengths
+
+        self.clipped_wlc = self.clipped_wlc[masker]
+        self.clipped_flux = self.clipped_flux[masker]
+
+
+
     def clip_spectrum(self, leftClip, rightClip):
         if not self.got_normed:
             print("You cannot clip before you normalize!")
@@ -722,7 +731,7 @@ class Star(object):
 
             cen = 'cen_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
                                                          epoch=row["date"])
-            self.params.add(cen, value=row["line_profile"],
+            self.params.add(cen, value=0,
                             vary=True)  # , min=0.01,max=1.0
             d["cen"] = cen
             sig = 'sig_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],

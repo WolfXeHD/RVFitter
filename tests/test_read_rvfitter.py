@@ -46,8 +46,8 @@ def model(params, row):
     amp = params[par_names["amp"]]
     cen = params[par_names["cen"]]
     sig = params[par_names["sig"]]
-    #  x = row["clipped_wlc_to_velocity"]
-    x = row["clipped_wlc"]
+    x = row["clipped_wlc_to_velocity"]
+    #  x = row["clipped_wlc"]
     return shape(x, amp, cen, sig)
 
 
@@ -102,24 +102,29 @@ class TestRVFitter(unittest.TestCase):
         self.myfitter.print_fit_result()
 
     def test_single_star_fitting(self):
+        #  filename = os.path.join(os.path.dirname(self.specsfilelist),
+                                #  "B111_speclist_Tim.pkl")
         filename = os.path.join(os.path.dirname(self.specsfilelist),
-                                "B111_speclist_Tim.pkl")
+                                "B275_speclist.pkl")
         self.myfitter.load_df(filename=filename)
         starnames = self.myfitter.df["starname"].unique()
         dates = self.myfitter.df["date"].unique()
 
         for starname in starnames:
             for date in dates:
+                print("\n\nFitting star {} on date {}".format(starname, date))
                 star_df = self.myfitter.get_df_from_star(name=starname,
                                                          date=date)
                 try:
                     this_fitter = copy.deepcopy(self.myfitter)
                     this_fitter.load_df(df=star_df)
                     #  this_fitter.setup_parameters()
-                    this_fitter.constrain_parameters(group="amp")
+                    this_fitter.constrain_parameters(group="cen")
                     this_fitter.set_objective(objective)
                     this_fitter.run_fit()
                     this_fitter.print_fit_result()
+
+                    print("\n\n")
 
                     this_fitter = copy.deepcopy(self.myfitter)
                     this_fitter.load_df(df=star_df)
