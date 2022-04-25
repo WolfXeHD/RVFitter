@@ -8,6 +8,7 @@ import pandas as pd
 import astropy.units as u
 import astropy.constants as const
 import numpy as np
+import pickle
 
 # TODO: add a unique identifier for a line which can be used as key for parameters
 
@@ -193,7 +194,7 @@ class RVFitter(lmfit.Model):
         self.line_names, self.line_profiles, self.wlc_windows = self._read_line_list(
             self.line_list)
         self.lines = self.make_line_objects()
-        self.objective = None
+        #  self.objective = None
         self.objective_set = False
         self.params = None
         self.star = list(set([item.starname for item in self.stars]))
@@ -374,10 +375,8 @@ class RVFitter(lmfit.Model):
             return False
 
     def setup_parameters(self):
-        l_params = []
         for star in self.stars:
             star.setup_parameters()
-            l_params.append(star.params)
         self.create_df(make=False)
         self.merge_parameters()
 
@@ -470,6 +469,18 @@ class RVFitter(lmfit.Model):
                                      self.params,
                                      args=([self.df]))
 
+    def save_fit_result(self, filename):
+        with open(filename, "wb") as f:
+            pickle.dump(self.result, f)
+
+    def load_fit_result(self, filename):
+        with open(filename, "rb") as f:
+            self.result = pickle.load(f)
+
+    def plot_fit_result(self):
+        pass
+
+
     def get_df_from_star(self, name, date):
         query = "starname == '{name}' & date == '{date}'".format(name=name,
                                                                  date=date)
@@ -519,6 +530,35 @@ class RVFitter(lmfit.Model):
             for specsfile in specsfilelist
         ]
         return cls(specsfile=None, stars=stars, line_list=line_list)
+
+    @staticmethod
+    def objective(params, df):
+        """ calculate total residual for fits to several data sets held
+        in a 2-D array, and modeled by Gaussian functions"""
+        resid = []
+        for _, row in df.iterrows():
+            resid.extend((row["clipped_flux"] - __class__.model(params, row)))
+        return np.array(resid)
+
+    @staticmethod
+    def shape(x, amp, cen, sigma, type="lorentzian"):
+        if type == "gaussian":
+            return 1 - amp * np.exp(-(x - cen) ** 2 / (2 * sigma ** 2))
+        elif type == "lorentzian":
+            return 1 - amp * (1 / (1 + ((x - cen) / sigma) ** 2))
+        elif type == "voigt":
+            raise NotImplementedError
+        else:
+            raise ValueError("Unknown shape type")
+
+    @staticmethod
+    def model(params, row):
+        par_names = row["parameters"]
+        amp = params[par_names["amp"]]
+        cen = params[par_names["cen"]]
+        sig = params[par_names["sig"]]
+        x = row["clipped_wlc_to_velocity"]
+        return __class__.shape(x, amp, cen, sig)
 
 
 class Star(object):
@@ -736,7 +776,7 @@ class Star(object):
             d["cen"] = cen
             sig = 'sig_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
                                                          epoch=row["date"])
-            self.params.add(sig, value=0.3, vary=True)  # , min=0.01,max=1.0
+            self.params.add(sig, value=50, vary=True)  # , min=0.01,max=1.0
             d["sig"] = sig
             rv_shift = 'rv_shift_line_{name}_epoch_{epoch}'.format(
                 name=row["line_hash"], epoch=row["date"])
