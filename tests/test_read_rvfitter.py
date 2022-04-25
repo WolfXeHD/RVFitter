@@ -97,7 +97,7 @@ class TestRVFitter(unittest.TestCase):
         self.myfitter.setup_parameters()
         #  self.myfitter.constrain_parameters(group="sig")
         #  #  self.myfitter.constrain_parameters(group="amp")
-        self.myfitter.set_objective(objective)
+        self.myfitter.set_objective(self.myfitter.objective)
         self.myfitter.run_fit()
         self.myfitter.print_fit_result()
 
@@ -133,8 +133,25 @@ class TestRVFitter(unittest.TestCase):
                     this_fitter.set_objective(objective)
                     this_fitter.run_fit()
                     this_fitter.print_fit_result()
+                    filename = "B275_fit_results.pkl"
+                    this_fitter.save_fit_result(filename=filename)
                 except:
                     print("Failed to fit {} with date {}".format(starname, date))
+
+    #  def test_loading_fit_result(self):
+    #      filename = os.path.join(os.path.dirname(self.specsfilelist),
+    #                              "B275_speclist.pkl")
+    #      self.myfitter.load_df(filename=filename)
+    #      self.myfitter.setup_parameters()
+    #
+    #      filename = "B275_fit_results.pkl"
+    #      self.myfitter.load_fit_result(filename=filename)
+    #      for star in self.myfitter.stars:
+    #          for line in star.lines:
+    #              this_df = self.myfitter.df.query('line_hash == @line.hash')
+    #              row = this_df.T.squeeze()
+    #              model = self.myfitter.model(params=self.myfitter.result.params, row=row)
+    #              print(model)
 
     def test_loading_from_df(self):
         filename = os.path.join(os.path.dirname(self.specsfilelist),
