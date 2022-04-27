@@ -151,11 +151,19 @@ class TestRVFitter(unittest.TestCase):
         self.myfitter.constrain_parameters(group="cen", constraint_type="epoch")
         self.myfitter.constrain_parameters(group="amp", constraint_type="line_profile")
         self.myfitter.constrain_parameters(group="sig", constraint_type="line_profile")
-        self.myfitter.set_objective(objective)
         self.myfitter.run_fit()
-        self.myfitter.print_fit_result()
-        self.myfitter.plot_model_and_data()
-        plt.show()
+        self.myfitter.print_fit_result(output_file="constraint_fits.txt")
+        #  self.myfitter.plot_model_and_data()
+        #  plt.show()
+
+    def test_fitting_individual_lines(self):
+        filename = os.path.join(os.path.dirname(self.specsfilelist),
+                                "B275_speclist.pkl")
+        self.myfitter.load_df(filename=filename)
+        self.myfitter.run_fit()
+        self.myfitter.print_fit_result(output_file="unconstraint_fits.txt")
+        #  self.myfitter.plot_model_and_data()
+        #  plt.show()
 
     #  def test_loading_fit_result(self):
     #      filename = os.path.join(os.path.dirname(self.specsfilelist),

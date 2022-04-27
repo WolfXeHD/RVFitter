@@ -224,7 +224,7 @@ class RVFitter(lmfit.Model):
             self.line_list)
         self.lines = self.make_line_objects()
         #  self.objective = None
-        self.objective_set = False
+        #  self.objective_set = False
         self.params = None
         self.star = list(set([item.starname for item in self.stars]))
         if len(self.star) != 1:
@@ -238,6 +238,7 @@ class RVFitter(lmfit.Model):
         self.fwhm_base = 'fwhm_line_{name}_epoch{epoch}'
         self.cen_base = 'cen_line_{name}_epoch_{epoch}'
         self.amp_base = 'amp_line_{name}_epoch_{epoch}'
+        self.output_file = 'Params_' + self.star + '.dat'
         self.df = None
 
     @property
@@ -255,9 +256,9 @@ class RVFitter(lmfit.Model):
             l_dfs.append(star.df)
         self.df = pd.concat(l_dfs, axis=0)
 
-    def set_objective(self, objective):
-        self.objective_set = True
-        self.objective = objective
+    #  def set_objective(self, objective):
+    #      self.objective_set = True
+    #      self.objective = objective
 
     def sort_by_date(self):
         """
@@ -480,8 +481,9 @@ class RVFitter(lmfit.Model):
             print("constraint_type not supported")
             raise SystemExit
 
-    def print_fit_result(self):
-        output_file = 'Params_' + self.star + '.dat'
+    def print_fit_result(self, output_file=None):
+        if output_file is None:
+            output_file = self.output_file
 
         print("Write parameters to file: {filename}".format(
             filename=output_file))
@@ -541,9 +543,9 @@ class RVFitter(lmfit.Model):
             #           file.write('vsini '+'\t'+str(vsini)+'\t'+str(err_vsini)+'\n')
 
     def run_fit(self):
-        if self.objective_set is False:
-            print("You did not specify an objective function!")
-            raise SystemExit
+        #  if self.objective_set is False:
+        #      print("You did not specify an objective function!")
+        #      raise SystemExit
         # TODO: minimize can also take kwargs --> can be used to set line-shape
         self.result = lmfit.minimize(self.objective,
                                      self.params,
