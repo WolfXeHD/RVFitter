@@ -9,6 +9,7 @@ import astropy.units as u
 import astropy.constants as const
 import numpy as np
 import pickle
+import copy
 
 # TODO: add a unique identifier for a line which can be used as key for parameters
 
@@ -96,8 +97,6 @@ class Line(object):
         self.clipped_wlc = self.clipped_wlc[masker]
         self.clipped_flux = self.clipped_flux[masker]
 
-
-
     def clip_spectrum(self, leftClip, rightClip):
         if not self.got_normed:
             print("You cannot clip before you normalize!")
@@ -119,7 +118,35 @@ class Line(object):
         for left, right in zip(self.leftClip, self.rightClip):
             ax.axvspan(left, right, color='blue', alpha=0.2)
 
-    def plot_clipped_spectrum(self, ax=None, title_prefix=None):
+
+    def plot_model(self, df, model_func, result, ax=None, plot_dict={"color": "r"}):
+        this_df = df.query(
+            'line_hash == @self.hash')
+        row = this_df.T.squeeze()
+        if ax is None:
+            fig, ax = plt.subplots()
+        else:
+            ax = ax
+
+        this_row = copy.deepcopy(row)
+        this_row["clipped_wlc_to_velocity"] = np.linspace(
+            self.clipped_wlc_to_velocity[0],
+            self.clipped_wlc_to_velocity[-1], 1000)
+
+        model = model_func(params=result.params, row=this_row)
+
+        ax.plot(this_row["clipped_wlc_to_velocity"], model,
+                **plot_dict)
+
+    def plot_clipped_spectrum(self,
+                              ax=None,
+                              title_prefix=None,
+                              plot_velocity=False,
+                              plot_dict={
+                                  "fmt": 'ro',
+                                  "color": 'black',
+                                  "ecolor": 'black'
+                              }):
 
         if not self.is_clipped:
             print("Clipped spectrum not found!")
@@ -135,12 +162,14 @@ class Line(object):
         if self.clipped_error is None:
             print("No errors for normed flux - assuming 1%")
             self.clipped_error = 0.01 * self.clipped_flux
-        ax.errorbar(self.clipped_wlc[indices],
+        if plot_velocity:
+            xdata = self.clipped_wlc_to_velocity
+        else:
+            xdata = self.clipped_wlc
+        ax.errorbar(xdata[indices],
                     self.clipped_flux[indices],
                     yerr=self.clipped_error[indices],
-                    fmt='ro',
-                    color='black',
-                    ecolor='black')
+                    **plot_dict)
         ax.axhline(y=1, linestyle='-.', color='black')
         ax.set_xlabel(r'wavelength ($\AA$)')
         ax.set_ylabel('flux')
@@ -361,6 +390,31 @@ class RVFitter(lmfit.Model):
         self.stars = stars
         self.setup_parameters()
 
+    def plot_model_and_data(self):
+        fig, axes = plt.subplots(len(self.stars), len(self.lines),
+                figsize=(4 * len(self.lines), 4 * len(self.stars)),
+                )
+        # change distance between axes in subplot of axes
+        fig.subplots_adjust(wspace=0.5, hspace=0.5)
+        if len(self.stars) == 1:
+            axes = axes.reshape((1, len(self.lines)))
+
+        for i, star in enumerate(self.stars):
+            for j, line in enumerate(star.lines):
+                this_ax = axes[i, j]
+                line.plot_clipped_spectrum(ax=this_ax,
+                                           plot_velocity=True,
+                                           plot_dict={
+                                               "fmt": 'ko',
+                                               "color": 'black',
+                                               "ecolor": 'black'
+                                           })
+                line.plot_model(df=star.df,
+                                model_func=self.model,
+                                result=self.result,
+                                ax=this_ax, plot_dict={"zorder": 2.5, "color": 'red'})
+
+
     def find_if_list_of_arrays_contains_different_arrays(self, list_of_arrays):
         """
         returns True if any of the arrays in the list are different
@@ -386,19 +440,45 @@ class RVFitter(lmfit.Model):
             params.update(star.params)
         self.params = params
 
-    def get_parameters(self, group):
+    def get_parameters(self, group, df=None):
         l_parameter = []
-        for _, row in self.df.iterrows():
+        if df is None:
+            df = self.df
+        for _, row in df.iterrows():
             l_parameter.append(row["parameters"][group])
         return l_parameter
 
-    def constrain_parameters(self, group):
-        parameters_to_constrain = self.get_parameters(group=group)
-        for idx, par in enumerate(parameters_to_constrain):
-            if idx == 0:
-                par_to_constrain = par
-                continue
-            self.params[par].expr = par_to_constrain
+    def constrain_parameters(self, group, constraint_type="epoch"):
+        # constraint of parameter of the same star and epoch
+        if constraint_type == "epoch":
+            dates = [star.date for star in self.stars]
+            parameters_to_constrain = self.get_parameters(group=group)
+            for date in dates:
+                this_parameter_group = []
+                for par in parameters_to_constrain:
+                    if date in par:
+                        this_parameter_group.append(par)
+                for idx, par in enumerate(this_parameter_group):
+                    if idx == 0:
+                        par_to_constrain = par
+                        continue
+                    self.params[par].expr = par_to_constrain
+
+        elif constraint_type == "line_profile":
+            line_profiles = self.df["line_profile"].unique()
+
+            for profile in line_profiles:
+                this_df = self.df.query("line_profile == {}".format(profile))
+
+                parameters_to_constrain = self.get_parameters(group=group, df=this_df)
+                for idx, par in enumerate(parameters_to_constrain):
+                    if idx == 0:
+                        par_to_constrain = par
+                        continue
+                    self.params[par].expr = par_to_constrain
+        else:
+            print("constraint_type not supported")
+            raise SystemExit
 
     def print_fit_result(self):
         output_file = 'Params_' + self.star + '.dat'
@@ -480,7 +560,6 @@ class RVFitter(lmfit.Model):
     def plot_fit_result(self):
         pass
 
-
     def get_df_from_star(self, name, date):
         query = "starname == '{name}' & date == '{date}'".format(name=name,
                                                                  date=date)
@@ -543,9 +622,9 @@ class RVFitter(lmfit.Model):
     @staticmethod
     def shape(x, amp, cen, sigma, type="lorentzian"):
         if type == "gaussian":
-            return 1 - amp * np.exp(-(x - cen) ** 2 / (2 * sigma ** 2))
+            return 1 - amp * np.exp(-(x - cen)**2 / (2 * sigma**2))
         elif type == "lorentzian":
-            return 1 - amp * (1 / (1 + ((x - cen) / sigma) ** 2))
+            return 1 - amp * (1 / (1 + ((x - cen) / sigma)**2))
         elif type == "voigt":
             raise NotImplementedError
         else:
@@ -771,8 +850,7 @@ class Star(object):
 
             cen = 'cen_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
                                                          epoch=row["date"])
-            self.params.add(cen, value=0,
-                            vary=True)  # , min=0.01,max=1.0
+            self.params.add(cen, value=0, vary=True)  # , min=0.01,max=1.0
             d["cen"] = cen
             sig = 'sig_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
                                                          epoch=row["date"])

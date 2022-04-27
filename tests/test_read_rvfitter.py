@@ -3,6 +3,7 @@ import pkg_resources
 import os
 import numpy as np
 import copy
+import matplotlib.pyplot as plt
 
 from RVFitter import RVFitter
 
@@ -26,9 +27,9 @@ def objective(params, df):
 
 def shape(x, amp, cen, sigma, type="lorentzian"):
     if type == "gaussian":
-        return 1 - amp * np.exp(-(x - cen) ** 2 / (2 * sigma ** 2))
+        return 1 - amp * np.exp(-(x - cen)**2 / (2 * sigma**2))
     elif type == "lorentzian":
-        return 1 - amp * (1 / (1 + ((x - cen) / sigma) ** 2))
+        return 1 - amp * (1 / (1 + ((x - cen) / sigma)**2))
     elif type == "voigt":
         raise NotImplementedError
         #  return amp * (1 / (1 + ((x - cen) / sigma) ** 2)) + \
@@ -101,42 +102,60 @@ class TestRVFitter(unittest.TestCase):
         self.myfitter.run_fit()
         self.myfitter.print_fit_result()
 
-    def test_single_star_fitting(self):
-        #  filename = os.path.join(os.path.dirname(self.specsfilelist),
-                                #  "B111_speclist_Tim.pkl")
+
+        plt.show()
+
+    #  def test_single_star_fitting(self):
+    #      #  filename = os.path.join(os.path.dirname(self.specsfilelist),
+    #      #  "B111_speclist_Tim.pkl")
+    #      filename = os.path.join(os.path.dirname(self.specsfilelist),
+    #                              "B275_speclist.pkl")
+    #      self.myfitter.load_df(filename=filename)
+    #      starnames = self.myfitter.df["starname"].unique()
+    #      dates = self.myfitter.df["date"].unique()
+    #
+    #      for starname in starnames:
+    #          for date in dates:
+    #              print("\n\nFitting star {} on date {}".format(starname, date))
+    #              star_df = self.myfitter.get_df_from_star(name=starname,
+    #                                                       date=date)
+    #              this_fitter = copy.deepcopy(self.myfitter)
+    #              this_fitter.load_df(df=star_df)
+    #              #  this_fitter.setup_parameters()
+    #              this_fitter.constrain_parameters(group="cen")
+    #              this_fitter.set_objective(objective)
+    #              this_fitter.run_fit()
+    #              this_fitter.print_fit_result()
+    #
+    #
+    #              print("\n\n")
+    #
+    #              this_fitter = copy.deepcopy(self.myfitter)
+    #              this_fitter.load_df(df=star_df)
+    #              #  this_fitter.setup_parameters()
+    #              #  this_fitter.constrain_parameters(group="amp")
+    #              this_fitter.set_objective(objective)
+    #              this_fitter.run_fit()
+    #              this_fitter.print_fit_result()
+    #              filename = "B275_fit_results.pkl"
+    #              this_fitter.save_fit_result(filename=filename)
+    #
+    #              #  this_fitter.plot_model_and_data()
+    #              #
+    #              #  plt.show()
+
+    def test_combined_fitting(self):
         filename = os.path.join(os.path.dirname(self.specsfilelist),
                                 "B275_speclist.pkl")
         self.myfitter.load_df(filename=filename)
-        starnames = self.myfitter.df["starname"].unique()
-        dates = self.myfitter.df["date"].unique()
-
-        for starname in starnames:
-            for date in dates:
-                print("\n\nFitting star {} on date {}".format(starname, date))
-                star_df = self.myfitter.get_df_from_star(name=starname,
-                                                         date=date)
-                try:
-                    this_fitter = copy.deepcopy(self.myfitter)
-                    this_fitter.load_df(df=star_df)
-                    #  this_fitter.setup_parameters()
-                    this_fitter.constrain_parameters(group="cen")
-                    this_fitter.set_objective(objective)
-                    this_fitter.run_fit()
-                    this_fitter.print_fit_result()
-
-                    print("\n\n")
-
-                    this_fitter = copy.deepcopy(self.myfitter)
-                    this_fitter.load_df(df=star_df)
-                    #  this_fitter.setup_parameters()
-                    #  this_fitter.constrain_parameters(group="amp")
-                    this_fitter.set_objective(objective)
-                    this_fitter.run_fit()
-                    this_fitter.print_fit_result()
-                    filename = "B275_fit_results.pkl"
-                    this_fitter.save_fit_result(filename=filename)
-                except:
-                    print("Failed to fit {} with date {}".format(starname, date))
+        self.myfitter.constrain_parameters(group="cen", constraint_type="epoch")
+        self.myfitter.constrain_parameters(group="amp", constraint_type="line_profile")
+        self.myfitter.constrain_parameters(group="sig", constraint_type="line_profile")
+        self.myfitter.set_objective(objective)
+        self.myfitter.run_fit()
+        self.myfitter.print_fit_result()
+        self.myfitter.plot_model_and_data()
+        plt.show()
 
     #  def test_loading_fit_result(self):
     #      filename = os.path.join(os.path.dirname(self.specsfilelist),
@@ -149,8 +168,6 @@ class TestRVFitter(unittest.TestCase):
     #      for star in self.myfitter.stars:
     #          for line in star.lines:
     #              this_df = self.myfitter.df.query('line_hash == @line.hash')
-    #              row = this_df.T.squeeze()
-    #              model = self.myfitter.model(params=self.myfitter.result.params, row=row)
     #              print(model)
 
     def test_loading_from_df(self):
@@ -174,7 +191,7 @@ class TestRVFitter(unittest.TestCase):
                                  row['normed_flux'].any())
                 self.assertEqual(line.normed_errors.any(),
                                  row['normed_errors'].any())
-                self.assertEqual(line.leftValueNorm  , row['leftValueNorm'])
+                self.assertEqual(line.leftValueNorm, row['leftValueNorm'])
 
                 # TODO check what is happening with these two tests
                 #    self.assertEqual(line.rightValueNorm , row['rightValueNorm'])
