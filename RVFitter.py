@@ -119,10 +119,14 @@ class Line(object):
         for left, right in zip(self.leftClip, self.rightClip):
             ax.axvspan(left, right, color='blue', alpha=0.2)
 
-
-    def plot_model(self, df, model_func, result, ax=None, plot_dict={"color": "r"}):
-        this_df = df.query(
-            'line_hash == @self.hash')
+    def plot_model(self,
+                   df,
+                   model_func,
+                   result,
+                   type,
+                   ax=None,
+                   plot_dict={"color": "r"}):
+        this_df = df.query('line_hash == @self.hash')
         row = this_df.T.squeeze()
         if ax is None:
             fig, ax = plt.subplots()
@@ -131,13 +135,12 @@ class Line(object):
 
         this_row = copy.deepcopy(row)
         this_row["clipped_wlc_to_velocity"] = np.linspace(
-            self.clipped_wlc_to_velocity[0],
-            self.clipped_wlc_to_velocity[-1], 1000)
+            self.clipped_wlc_to_velocity[0], self.clipped_wlc_to_velocity[-1],
+            1000)
 
-        model = model_func(params=result.params, row=this_row)
+        model = model_func(params=result.params, row=this_row, type=type)
 
-        ax.plot(this_row["clipped_wlc_to_velocity"], model,
-                **plot_dict)
+        ax.plot(this_row["clipped_wlc_to_velocity"], model, **plot_dict)
 
     def plot_clipped_spectrum(self,
                               ax=None,
@@ -224,9 +227,7 @@ class RVFitter(lmfit.Model):
         self.line_names, self.line_profiles, self.wlc_windows = self._read_line_list(
             self.line_list)
         self.lines = self.make_line_objects()
-        self.shape = "gaussian"
-        #  self.objective = None
-        #  self.objective_set = False
+        self.shape_profile = "lorentzian"
         self.params = None
         self.star = list(set([item.starname for item in self.stars]))
         if len(self.star) != 1:
@@ -257,10 +258,6 @@ class RVFitter(lmfit.Model):
                 star.make_dataframe()
             l_dfs.append(star.df)
         self.df = pd.concat(l_dfs, axis=0)
-
-    #  def set_objective(self, objective):
-    #      self.objective_set = True
-    #      self.objective = objective
 
     def sort_by_date(self):
         """
@@ -394,9 +391,11 @@ class RVFitter(lmfit.Model):
         self.setup_parameters()
 
     def get_fig_and_axes(self):
-        fig, axes = plt.subplots(len(self.stars), len(self.lines),
-                figsize=(4 * len(self.lines), 4 * len(self.stars)),
-                )
+        fig, axes = plt.subplots(
+            len(self.stars),
+            len(self.lines),
+            figsize=(4 * len(self.lines), 4 * len(self.stars)),
+        )
         # change distance between axes in subplot of axes
         fig.subplots_adjust(wspace=0.5, hspace=0.5)
         if len(self.stars) == 1:
@@ -407,19 +406,28 @@ class RVFitter(lmfit.Model):
         for i, star in enumerate(self.stars):
             for j, line in enumerate(star.lines):
                 this_ax = axes[i, j]
+
                 line.plot_model(df=star.df,
                                 model_func=self.model,
+                                type=self.shape_profile,
                                 result=self.result,
-                                ax=this_ax, plot_dict=plot_dict)
+                                ax=this_ax,
+                                plot_dict=plot_dict)
 
-    def plot_data(self, fig, axes, plot_dict={"fmt": 'ko', "color": "black", "ecolor": "black"}):
+    def plot_data(self,
+                  fig,
+                  axes,
+                  plot_dict={
+                      "fmt": 'ko',
+                      "color": "black",
+                      "ecolor": "black"
+                  }):
         for i, star in enumerate(self.stars):
             for j, line in enumerate(star.lines):
                 this_ax = axes[i, j]
                 line.plot_clipped_spectrum(ax=this_ax,
                                            plot_velocity=True,
-                                           plot_dict=plot_dict
-                                           )
+                                           plot_dict=plot_dict)
 
     def apply_legend(self, axes):
         for i, star in enumerate(self.stars):
@@ -428,9 +436,11 @@ class RVFitter(lmfit.Model):
                 this_ax.legend(loc='upper right')
 
     def plot_model_and_data(self):
-        fig, axes = plt.subplots(len(self.stars), len(self.lines),
-                figsize=(4 * len(self.lines), 4 * len(self.stars)),
-                )
+        fig, axes = plt.subplots(
+            len(self.stars),
+            len(self.lines),
+            figsize=(4 * len(self.lines), 4 * len(self.stars)),
+        )
         # change distance between axes in subplot of axes
         fig.subplots_adjust(wspace=0.5, hspace=0.5)
         if len(self.stars) == 1:
@@ -449,8 +459,12 @@ class RVFitter(lmfit.Model):
                 line.plot_model(df=star.df,
                                 model_func=self.model,
                                 result=self.result,
-                                ax=this_ax, plot_dict={"zorder": 2.5, "color": 'red'})
-
+                                type=self.shape_profile,
+                                ax=this_ax,
+                                plot_dict={
+                                    "zorder": 2.5,
+                                    "color": 'red'
+                                })
 
     def find_if_list_of_arrays_contains_different_arrays(self, list_of_arrays):
         """
@@ -507,7 +521,8 @@ class RVFitter(lmfit.Model):
             for profile in line_profiles:
                 this_df = self.df.query("line_profile == {}".format(profile))
 
-                parameters_to_constrain = self.get_parameters(group=group, df=this_df)
+                parameters_to_constrain = self.get_parameters(group=group,
+                                                              df=this_df)
                 for idx, par in enumerate(parameters_to_constrain):
                     if idx == 0:
                         par_to_constrain = par
@@ -586,14 +601,15 @@ class RVFitter(lmfit.Model):
                            '\n')
             #           file.write('vsini '+'\t'+str(vsini)+'\t'+str(err_vsini)+'\n')
 
-    def run_fit(self):
-        #  if self.objective_set is False:
-        #      print("You did not specify an objective function!")
-        #      raise SystemExit
-        # TODO: minimize can also take kwargs --> can be used to set line-shape
-        self.result = lmfit.minimize(self.objective,
+    def run_fit(self, objective=None):
+        if objective is None:
+            this_objective = self.objective
+        else:
+            this_objective = objective
+        self.result = lmfit.minimize(this_objective,
                                      self.params,
-                                     args=([self.df]))
+                                     args=([self.df]),
+                                     kws={"type": self.shape_profile})
 
     def save_fit_result(self, filename):
         with open(filename, "wb") as f:
@@ -660,12 +676,13 @@ class RVFitter(lmfit.Model):
         return cls(specsfile=None, stars=stars, line_list=line_list)
 
     @staticmethod
-    def objective(params, df):
+    def objective(params, df, type="lorentzian"):
         """ calculate total residual for fits to several data sets held
         in a 2-D array, and modeled by Gaussian functions"""
         resid = []
         for _, row in df.iterrows():
-            resid.extend((row["clipped_flux"] - __class__.model(params, row)))
+            resid.extend(
+                (row["clipped_flux"] - __class__.model(params, row, type)))
         return np.array(resid)
 
     @staticmethod
@@ -680,13 +697,13 @@ class RVFitter(lmfit.Model):
             raise ValueError("Unknown shape type")
 
     @staticmethod
-    def model(params, row):
+    def model(params, row, type):
         par_names = row["parameters"]
         amp = params[par_names["amp"]]
         cen = params[par_names["cen"]]
         sig = params[par_names["sig"]]
         x = row["clipped_wlc_to_velocity"]
-        return __class__.shape(x, amp, cen, sig)
+        return __class__.shape(x, amp, cen, sig, type)
 
 
 class Star(object):
