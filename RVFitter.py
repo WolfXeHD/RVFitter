@@ -10,6 +10,7 @@ import astropy.constants as const
 import numpy as np
 import pickle
 import copy
+import os
 
 # TODO: add a unique identifier for a line which can be used as key for parameters
 
@@ -223,6 +224,7 @@ class RVFitter(lmfit.Model):
         self.line_names, self.line_profiles, self.wlc_windows = self._read_line_list(
             self.line_list)
         self.lines = self.make_line_objects()
+        self.shape = "gaussian"
         #  self.objective = None
         #  self.objective_set = False
         self.params = None
@@ -391,6 +393,40 @@ class RVFitter(lmfit.Model):
         self.stars = stars
         self.setup_parameters()
 
+    def get_fig_and_axes(self):
+        fig, axes = plt.subplots(len(self.stars), len(self.lines),
+                figsize=(4 * len(self.lines), 4 * len(self.stars)),
+                )
+        # change distance between axes in subplot of axes
+        fig.subplots_adjust(wspace=0.5, hspace=0.5)
+        if len(self.stars) == 1:
+            axes = axes.reshape((1, len(self.lines)))
+        return fig, axes
+
+    def plot_fit(self, fig, axes, plot_dict={"zorder": 2.5, "color": "red"}):
+        for i, star in enumerate(self.stars):
+            for j, line in enumerate(star.lines):
+                this_ax = axes[i, j]
+                line.plot_model(df=star.df,
+                                model_func=self.model,
+                                result=self.result,
+                                ax=this_ax, plot_dict=plot_dict)
+
+    def plot_data(self, fig, axes, plot_dict={"fmt": 'ko', "color": "black", "ecolor": "black"}):
+        for i, star in enumerate(self.stars):
+            for j, line in enumerate(star.lines):
+                this_ax = axes[i, j]
+                line.plot_clipped_spectrum(ax=this_ax,
+                                           plot_velocity=True,
+                                           plot_dict=plot_dict
+                                           )
+
+    def apply_legend(self, axes):
+        for i, star in enumerate(self.stars):
+            for j, line in enumerate(star.lines):
+                this_ax = axes[i, j]
+                this_ax.legend(loc='upper right')
+
     def plot_model_and_data(self):
         fig, axes = plt.subplots(len(self.stars), len(self.lines),
                 figsize=(4 * len(self.lines), 4 * len(self.stars)),
@@ -480,6 +516,14 @@ class RVFitter(lmfit.Model):
         else:
             print("constraint_type not supported")
             raise SystemExit
+
+    @staticmethod
+    def id_func(specsfile):
+        filename = os.path.basename(specsfile)
+        splitted_file = filename.split("_")
+        starname = splitted_file[0]
+        date = splitted_file[2]
+        return starname, date
 
     def print_fit_result(self, output_file=None):
         if output_file is None:
@@ -574,14 +618,17 @@ class RVFitter(lmfit.Model):
     @classmethod
     def from_specsfilelist_name_flexi(cls,
                                       specsfilelist_name,
-                                      id_func,
                                       line_list,
+                                      id_func=None,
                                       datetime_formatter="%Y%m%dT%H",
                                       debug=False):
         with open(specsfilelist_name, 'r') as f:
             specsfilelist = f.read().splitlines()
         if debug:
             specsfilelist = specsfilelist[:2]
+
+        if id_func is None:
+            id_func = __class__.id_func
 
         stars = [
             Star.from_specsfile_flexi(specsfile=specsfile,
