@@ -98,51 +98,46 @@ class TestRVFitter(unittest.TestCase):
         self.myfitter.setup_parameters()
         #  self.myfitter.constrain_parameters(group="sig")
         #  #  self.myfitter.constrain_parameters(group="amp")
-        self.myfitter.set_objective(self.myfitter.objective)
+        self.myfitter.shape_profile = "lorentzian"
         self.myfitter.run_fit()
         self.myfitter.print_fit_result()
 
+    def test_single_star_fitting(self):
+        #  filename = os.path.join(os.path.dirname(self.specsfilelist),
+        #  "B111_speclist_Tim.pkl")
+        filename = os.path.join(os.path.dirname(self.specsfilelist),
+                                "B275_speclist.pkl")
+        self.myfitter.load_df(filename=filename)
+        starnames = self.myfitter.df["starname"].unique()
+        dates = self.myfitter.df["date"].unique()
 
-        plt.show()
+        for starname in starnames:
+            for date in dates:
+                print("\n\nFitting star {} on date {}".format(starname, date))
+                star_df = self.myfitter.get_df_from_star(name=starname,
+                                                         date=date)
+                this_fitter = copy.deepcopy(self.myfitter)
+                this_fitter.load_df(df=star_df)
+                #  this_fitter.setup_parameters()
+                this_fitter.constrain_parameters(group="cen")
+                this_fitter.run_fit()
+                this_fitter.print_fit_result()
 
-    #  def test_single_star_fitting(self):
-    #      #  filename = os.path.join(os.path.dirname(self.specsfilelist),
-    #      #  "B111_speclist_Tim.pkl")
-    #      filename = os.path.join(os.path.dirname(self.specsfilelist),
-    #                              "B275_speclist.pkl")
-    #      self.myfitter.load_df(filename=filename)
-    #      starnames = self.myfitter.df["starname"].unique()
-    #      dates = self.myfitter.df["date"].unique()
-    #
-    #      for starname in starnames:
-    #          for date in dates:
-    #              print("\n\nFitting star {} on date {}".format(starname, date))
-    #              star_df = self.myfitter.get_df_from_star(name=starname,
-    #                                                       date=date)
-    #              this_fitter = copy.deepcopy(self.myfitter)
-    #              this_fitter.load_df(df=star_df)
-    #              #  this_fitter.setup_parameters()
-    #              this_fitter.constrain_parameters(group="cen")
-    #              this_fitter.set_objective(objective)
-    #              this_fitter.run_fit()
-    #              this_fitter.print_fit_result()
-    #
-    #
-    #              print("\n\n")
-    #
-    #              this_fitter = copy.deepcopy(self.myfitter)
-    #              this_fitter.load_df(df=star_df)
-    #              #  this_fitter.setup_parameters()
-    #              #  this_fitter.constrain_parameters(group="amp")
-    #              this_fitter.set_objective(objective)
-    #              this_fitter.run_fit()
-    #              this_fitter.print_fit_result()
-    #              filename = "B275_fit_results.pkl"
-    #              this_fitter.save_fit_result(filename=filename)
-    #
-    #              #  this_fitter.plot_model_and_data()
-    #              #
-    #              #  plt.show()
+
+                print("\n\n")
+
+                this_fitter = copy.deepcopy(self.myfitter)
+                this_fitter.load_df(df=star_df)
+                #  this_fitter.setup_parameters()
+                #  this_fitter.constrain_parameters(group="amp")
+                this_fitter.run_fit()
+                this_fitter.print_fit_result()
+                filename = "B275_fit_results.pkl"
+                this_fitter.save_fit_result(filename=filename)
+
+                #  this_fitter.plot_model_and_data()
+                #
+                #  plt.show()
 
     def test_combined_fitting(self):
         filename = os.path.join(os.path.dirname(self.specsfilelist),
