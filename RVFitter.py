@@ -175,8 +175,11 @@ class Line(object):
                     yerr=self.clipped_error[indices],
                     **plot_dict)
         ax.axhline(y=1, linestyle='-.', color='black')
-        ax.set_xlabel(r'wavelength ($\AA$)')
-        ax.set_ylabel('flux')
+        if plot_velocity:
+            ax.set_xlabel("Velocity (km/s)")
+        else:
+            ax.set_xlabel(r'Wavelength ($\AA$)')
+        ax.set_ylabel('normalized flux')
         title = self.line_name + ' ' + str(
             "%.0f" % self.line_profile) + ' (clipped)'
         if title_prefix == None:
@@ -185,7 +188,6 @@ class Line(object):
             ax.set_title(title_prefix + title)
 
     def plot_normed_spectrum(self, ax=None, title_prefix=None):
-
         if not self.got_normed:
             print("You cannot plot a normed spectrum before adding it!")
             raise SystemExit
@@ -219,22 +221,20 @@ class Line(object):
 
 class RVFitter(lmfit.Model):
     """Docstring for RVFitter. """
-    def __init__(self, specsfilelist_name, stars, line_list, debug=False):
-        self.specsfilelist_name = specsfilelist_name
+    def __init__(self, stars, df_name=None, debug=False):
         self.stars = stars
-        self.line_list = line_list
         self.debug = debug
-        self.line_names, self.line_profiles, self.wlc_windows = self._read_line_list(
-            self.line_list)
-        self.lines = self.make_line_objects()
         self.shape_profile = "lorentzian"
         self.params = None
         self.star = list(set([item.starname for item in self.stars]))
+
         if len(self.star) != 1:
             print("You seem to mix stars! This does not make sense!")
             raise SystemExit
         else:
             self.star = self.star[0]
+
+        self.lines = self.stars[0].lines
 
         self.rv_shift_base = 'rv_shift_line_{name}_epoch_{epoch}'
         self.sig_base = 'sig_line_{name}_epoch_{epoch}'
@@ -242,14 +242,21 @@ class RVFitter(lmfit.Model):
         self.cen_base = 'cen_line_{name}_epoch_{epoch}'
         self.amp_base = 'amp_line_{name}_epoch_{epoch}'
         self.output_file = 'Params_' + self.star + '.dat'
-        self.df = None
-
-    @property
-    def df_name(self):
-        if not self.debug:
-            return self.specsfilelist_name.replace('.txt', '.pkl')
+        self.df_name = df_name
+        #  if self.df_name is not None:
+        #      self.df = pd.read_pickle(self.df_name)
+        #  else:
+        if self.df_name is None:
+            self.df = None
         else:
-            return self.specsfilelist_name.replace('.txt', '_DEBUG.pkl')
+            self.df = pd.read_pickle(self.df_name)
+
+    #  @property
+    #  def df_name(self):
+    #      if not self.debug:
+    #          return self.specsfilelist_name.replace('.txt', '.pkl')
+    #      else:
+    #          return self.specsfilelist_name.replace('.txt', '_DEBUG.pkl')
 
     def create_df(self, make=True):
         l_dfs = []
@@ -276,15 +283,15 @@ class RVFitter(lmfit.Model):
 
         return line_names, line_profiles, wlc_windows
 
-    def make_line_objects(self):
-        lines = []
-        for name, profile, wlc in zip(self.line_names, self.line_profiles,
-                                      self.wlc_windows):
-            this_line = Line(line_name=name,
-                             line_profile=profile,
-                             wlc_window=wlc)
-            lines.append(this_line)
-        return lines
+    #  def make_line_objects(self):
+    #      lines = []
+    #      for name, profile, wlc in zip(self.line_names, self.line_profiles,
+    #                                    self.wlc_windows):
+    #          this_line = Line(line_name=name,
+    #                           line_profile=profile,
+    #                           wlc_window=wlc)
+    #          lines.append(this_line)
+    #      return lines
 
     def save_df(self, filename=None):
         if filename is None:
@@ -298,27 +305,16 @@ class RVFitter(lmfit.Model):
     def create_fitter_from_df(cls):
         pass
 
+    @classmethod
+    def load_from_df_file(cls, filename):
+        df = pd.read_pickle(filename)
+        return cls.load_from_df(df)
+
     # TODO: shouldn't this be a classmethod?
-    def load_df(self, filename=None, df=None):
-        if filename is not None and df is not None:
-            print("You cannot load a dataframe and specify a filename!")
-            raise SystemExit
-
-        if filename is None:
-            file_to_read = self.df_name
-        else:
-            file_to_read = filename
-
-        if df is not None:
-            self.df = df
-            print("Using the dataframe you passed in.")
-        else:
-            self.df = pd.read_pickle(file_to_read)
-            print("Loading dataframe from {filename}".format(
-                filename=file_to_read))
-
-        starnames = self.df['starname'].unique()
-        dates = self.df['date'].unique()
+    @classmethod
+    def load_from_df(cls, df):
+        starnames = df['starname'].unique()
+        dates = df['date'].unique()
 
         query = "(starname == '{star}') & (date == '{date}')"
 
@@ -326,14 +322,14 @@ class RVFitter(lmfit.Model):
         for star in starnames:
             for date in dates:
                 this_query = query.format(star=star, date=date)
-                this_df = self.df.query(this_query)
+                this_df = df.query(this_query)
 
                 lines = []
                 wavelengths = []
                 fluxes = []
                 flux_errors = []
 
-                for idx, row in this_df.iterrows():
+                for _, row in this_df.iterrows():
                     this_line = Line(line_name=row['line_name'],
                                      line_profile=row['line_profile'],
                                      wlc_window=row['wlc_window'])
@@ -357,21 +353,21 @@ class RVFitter(lmfit.Model):
                     wavelengths.append(row["wavelength"])
                     flux_errors.append(row["flux_error"])
 
-                if self.find_if_list_of_arrays_contains_different_arrays(
+                if cls.find_if_list_of_arrays_contains_different_arrays(
                         fluxes):
                     print(
                         "WARNING: There are different fluxes for the same line!"
                     )
                     print("         This is not supported by the fitter!")
                     raise SystemExit
-                if self.find_if_list_of_arrays_contains_different_arrays(
+                if cls.find_if_list_of_arrays_contains_different_arrays(
                         wavelengths):
                     print(
                         "WARNING: There are different wavelengths for the same line!"
                     )
                     print("         This is not supported by the fitter!")
                     raise SystemExit
-                if self.find_if_list_of_arrays_contains_different_arrays(
+                if cls.find_if_list_of_arrays_contains_different_arrays(
                         flux_errors):
                     print(
                         "WARNING: There are different flux errors for the same line!"
@@ -387,8 +383,11 @@ class RVFitter(lmfit.Model):
                                  flux_errors=flux_errors[0])
                 this_star.df = this_df
                 stars.append(this_star)
-        self.stars = stars
-        self.setup_parameters()
+        this_instance = cls(stars=stars)
+        this_instance.df = df
+        this_instance.setup_parameters()
+        #  __import__('ipdb').set_trace()
+        return this_instance
 
     def get_fig_and_axes(self):
         fig, axes = plt.subplots(
@@ -465,8 +464,10 @@ class RVFitter(lmfit.Model):
                                     "zorder": 2.5,
                                     "color": 'red'
                                 })
+                this_ax.set_xlabel("Velocity (km/s)")
 
-    def find_if_list_of_arrays_contains_different_arrays(self, list_of_arrays):
+    @classmethod
+    def find_if_list_of_arrays_contains_different_arrays(cls, list_of_arrays):
         """
         returns True if any of the arrays in the list are different
         """
@@ -636,6 +637,7 @@ class RVFitter(lmfit.Model):
                                       specsfilelist_name,
                                       line_list,
                                       id_func=None,
+                                      share_line_hashes=False,
                                       datetime_formatter="%Y%m%dT%H",
                                       debug=False):
         with open(specsfilelist_name, 'r') as f:
@@ -654,9 +656,14 @@ class RVFitter(lmfit.Model):
                                       debug=debug)
             for specsfile in specsfilelist
         ]
-        return cls(specsfilelist_name=specsfilelist_name,
-                   stars=stars,
-                   line_list=line_list)
+
+        if share_line_hashes:
+            line_hashes = [star.lines[0].hash for star in stars]
+            for star in stars:
+                for line, hash in zip(star.lines, line_hashes):
+                    line.hash = hash
+            stars = [star for star in stars]
+        return cls(stars=stars)
 
     @classmethod
     def from_specsfilelist_flexi(cls,
@@ -673,7 +680,7 @@ class RVFitter(lmfit.Model):
                                       debug=debug)
             for specsfile in specsfilelist
         ]
-        return cls(specsfile=None, stars=stars, line_list=line_list)
+        return cls(stars=stars)
 
     @staticmethod
     def objective(params, df, type="lorentzian"):
