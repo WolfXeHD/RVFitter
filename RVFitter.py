@@ -11,6 +11,7 @@ import numpy as np
 import pickle
 import copy
 import os
+import ipdb
 
 # TODO: add a unique identifier for a line which can be used as key for parameters
 
@@ -399,6 +400,9 @@ class RVFitter(lmfit.Model):
         fig.subplots_adjust(wspace=0.5, hspace=0.5)
         if len(self.stars) == 1:
             axes = axes.reshape((1, len(self.lines)))
+        if len(self.lines) == 1:
+            axes = axes.reshape((len(self.stars), 1))
+
         return fig, axes
 
     def plot_fit(self, fig, axes, plot_dict={"zorder": 2.5, "color": "red"}):
@@ -412,6 +416,9 @@ class RVFitter(lmfit.Model):
                                 result=self.result,
                                 ax=this_ax,
                                 plot_dict=plot_dict)
+
+    def plot_residuals(self, fig, axes, plot_dict={"zorder": 2.5, "color": "yellow"}):
+        
 
     def plot_data(self,
                   fig,
