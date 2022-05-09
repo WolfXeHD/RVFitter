@@ -417,14 +417,30 @@ class RVFitter(lmfit.Model):
                                 ax=this_ax,
                                 plot_dict=plot_dict)
 
+    def get_fig_ax_dict(self):
+        dates_list = []
+        for i, star in enumerate(self.stars):
+            row_ids = []
+            for j, line in enumerate(star.lines):
+                row_ids.append(('{}_{}').format(star.date, line.line_profile))
+                print(star.date, line.line_profile)
+            dates_list.append(row_ids)
+
+        fig = plt.figure(constrained_layout=True)
+        ax_dict = fig.subplot_mosaic(
+            dates_list,
+            sharex=True,
+        )
+        return fig, ax_dict
+
     def plot_residuals(self, fig, axes, plot_dict={"zorder": 2.5, "color": "yellow"}):
-        
+        pass
 
     def plot_data(self,
                   fig,
                   axes,
                   plot_dict={
-                      "fmt": 'ko',
+                      "fmt": 'o',
                       "color": "black",
                       "ecolor": "black"
                   }):
