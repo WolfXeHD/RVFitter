@@ -143,6 +143,30 @@ class Line(object):
 
         ax.plot(this_row["clipped_wlc_to_velocity"], model, **plot_dict)
 
+
+    def plot_residuals(self,
+                   df,
+                   model_func,
+                   result,
+                   type,
+                   ax=None,
+                   plot_dict={"color": "r", "marker": "."}):
+        this_df = df.query('line_hash == @self.hash')
+        row = this_df.T.squeeze()
+        if ax is None:
+            fig, ax = plt.subplots()
+        else:
+            ax = ax
+
+        this_row = copy.deepcopy(row)
+
+        model = model_func(params=result.params, row=this_row, type=type)
+
+        residuals = (this_row["clipped_flux"] - model) / this_row["clipped_error"]
+
+        ax.plot(this_row["clipped_wlc_to_velocity"], residuals, **plot_dict)
+        ax.set_ylim(np.abs(max(residuals))*(-1), np.abs(max(residuals)))
+
     def plot_clipped_spectrum(self,
                               ax=None,
                               title_prefix=None,
@@ -185,6 +209,8 @@ class Line(object):
             "%.0f" % self.line_profile) + ' (clipped)'
         if title_prefix == None:
             ax.set_title(title)
+        elif title_prefix == 'no_title':
+            pass
         else:
             ax.set_title(title_prefix + title)
 
@@ -405,6 +431,31 @@ class RVFitter(lmfit.Model):
 
         return fig, axes
 
+    def get_fig_and_ax_dict(self):
+        dates_list = []
+        for i, star in enumerate(self.stars):
+            line_ids = []
+            res_ids = []
+            for j, line in enumerate(star.lines):
+                line_ids.append(('{}_{}').format(star.date, line.line_profile))
+                res_ids.append(('{}_{}_res').format(star.date, line.line_profile))
+            dates_list.append(line_ids)
+            dates_list.append(res_ids)
+
+        fig = plt.figure(constrained_layout=False,
+                         figsize=(4 * len(self.lines), 4 * len(self.stars)))
+        ax_dict = fig.subplot_mosaic(
+            dates_list,
+            sharex=False,
+            gridspec_kw={
+                "wspace": 0.3,
+                "hspace": 0,
+                "height_ratios": [5, 2]*len(self.stars),
+                # "width_ratios": [1]*len(self.stars),
+            },
+        )
+        return fig, ax_dict
+
     def plot_fit(self, fig, axes, plot_dict={"zorder": 2.5, "color": "red"}):
         for i, star in enumerate(self.stars):
             for j, line in enumerate(star.lines):
@@ -417,24 +468,49 @@ class RVFitter(lmfit.Model):
                                 ax=this_ax,
                                 plot_dict=plot_dict)
 
-    def get_fig_ax_dict(self):
-        dates_list = []
+    def plot_fit_and_residuals(self,
+                               fig,
+                               ax_dict,
+                               plot_dict={"zorder": 2.5, "color": "red"},
+                               plot_dict_res={"marker": ".", "linestyle": 'None', "color": "red"}):
         for i, star in enumerate(self.stars):
-            row_ids = []
             for j, line in enumerate(star.lines):
-                row_ids.append(('{}_{}').format(star.date, line.line_profile))
-                print(star.date, line.line_profile)
-            dates_list.append(row_ids)
+                this_ax = ax_dict[('{}_{}').format(star.date, line.line_profile)]
+                this_ax_res = ax_dict[('{}_{}_res').format(star.date, line.line_profile)]
 
-        fig = plt.figure(constrained_layout=True)
-        ax_dict = fig.subplot_mosaic(
-            dates_list,
-            sharex=True,
-        )
-        return fig, ax_dict
+                line.plot_model(df=star.df,
+                                model_func=self.model,
+                                type=self.shape_profile,
+                                result=self.result,
+                                ax=this_ax,
+                                plot_dict=plot_dict)
+                line.plot_residuals(df=star.df,
+                                    model_func=self.model,
+                                    type=self.shape_profile,
+                                    result=self.result,
+                                    ax=this_ax_res,
+                                    plot_dict=plot_dict_res)
 
-    def plot_residuals(self, fig, axes, plot_dict={"zorder": 2.5, "color": "yellow"}):
-        pass
+                this_ax_res.axhline(0, linestyle="--", color="black")
+                # this_ax_res.set_ylim(-0.5, 0.5)
+
+    def plot_data_and_residuals(self,
+                       fig,
+                       ax_dict,
+                       plot_dict={"fmt": '.', "color": "black","ecolor": "black"}):
+        for i, star in enumerate(self.stars):
+            for j, line in enumerate(star.lines):
+                if i != 0:
+                    title_prefix = 'no_title'
+                else:
+                    title_prefix = None
+                this_ax = ax_dict[('{}_{}').format(star.date, line.line_profile)]
+                this_ax_res = ax_dict[('{}_{}_res').format(star.date, line.line_profile)]
+                line.plot_clipped_spectrum(ax=this_ax,
+                                           plot_velocity=True,
+                                           title_prefix=title_prefix,
+                                           plot_dict=plot_dict)
+                this_ax_res.set_xlabel("Velocity (km/s)")
 
     def plot_data(self,
                   fig,
@@ -474,7 +550,7 @@ class RVFitter(lmfit.Model):
                 line.plot_clipped_spectrum(ax=this_ax,
                                            plot_velocity=True,
                                            plot_dict={
-                                               "fmt": 'ko',
+                                               "fmt": 'k.',
                                                "color": 'black',
                                                "ecolor": 'black'
                                            })
@@ -487,7 +563,7 @@ class RVFitter(lmfit.Model):
                                     "zorder": 2.5,
                                     "color": 'red'
                                 })
-                this_ax.set_xlabel("Velocity (km/s)")
+                # this_ax.set_xlabel("Velocity (km/s)")
 
     @classmethod
     def find_if_list_of_arrays_contains_different_arrays(cls, list_of_arrays):
