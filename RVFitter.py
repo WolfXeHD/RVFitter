@@ -1054,3 +1054,60 @@ class Star(object):
         if "parameters" in self.df.columns:
             del self.df["parameters"]
         self.df["parameters"] = l_parameter_names
+
+class RVFitter_comparison(object):
+
+    """Docstring for RVFitter_comparison. """
+
+    def __init__(self, dict_of_fitters):
+        self.dict_of_fitters = dict_of_fitters
+
+    def create_overview_df(self):
+        df = pd.DataFrame()
+        for key, fitter in self.dict_of_fitters.items():
+            df = self.add_parameters_to_df(df=df, fitter=fitter, suffix="_" + key)
+        self.df = df
+
+
+
+    def add_parameters_to_df(self, df, fitter, suffix):
+        l_amp = []
+        l_cen = []
+        l_sig = []
+        l_error_amp = []
+        l_error_cen = []
+        l_error_sig = []
+        for parameter in fitter.df["parameters"]:
+            amp = parameter["amp"]
+            cen = parameter["cen"]
+            sig = parameter["sig"]
+
+            l_amp.append(fitter.result.params[amp].value)
+            l_cen.append(fitter.result.params[cen].value)
+            l_sig.append(fitter.result.params[sig].value)
+
+            l_error_amp.append(fitter.result.params[amp].stderr)
+            l_error_cen.append(fitter.result.params[cen].stderr)
+            l_error_sig.append(fitter.result.params[sig].stderr)
+
+        this_df = pd.DataFrame({"date" + suffix: fitter.df["date"],
+            "line_profile" + suffix: fitter.df["line_profile"],
+            "amp" + suffix: l_amp,
+            "cen" + suffix: l_cen,
+            "sig" + suffix: l_sig,
+            "error_amp" + suffix: l_error_amp,
+            "error_cen" + suffix: l_error_cen,
+            "error_sig" + suffix: l_error_sig
+            })
+
+        for col in df.columns:
+            if "date" in col:
+                check = df[col] == this_df["date" + suffix]
+                if np.sum(check) != len(check):
+                    raise Exception("Error: date mismatch")
+            if "line_profile" in col:
+                check = df[col] == this_df["line_profile" + suffix]
+                if np.sum(check) != len(check):
+                    raise Exception("Error: line_profile mismatch")
+        df = pd.concat([df, this_df], axis=1)
+        return df
