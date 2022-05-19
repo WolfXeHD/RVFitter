@@ -1,6 +1,6 @@
 numpy
 pytest
-matplotlib
+matplotlib==3.5
 pandas
 scipy
 lmfit
