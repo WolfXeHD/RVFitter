@@ -97,10 +97,8 @@ class TestRVFitter(unittest.TestCase):
                 line.clip_spectrum(leftClip=left, rightClip=right)
 
         self.myfitter.create_df()
-        self.myfitter.setup_parameters()
-        #  self.myfitter.constrain_parameters(group="sig")
-        #  #  self.myfitter.constrain_parameters(group="amp")
         self.myfitter.shape_profile = "lorentzian"
+        self.myfitter.setup_parameters()
         self.myfitter.run_fit()
         self.myfitter.print_fit_result()
 
@@ -121,6 +119,7 @@ class TestRVFitter(unittest.TestCase):
                 this_fitter = RVFitter.load_from_df(df=star_df)
                 #  this_fitter.setup_parameters()
                 this_fitter.shape_profile = "lorentzian"
+                this_fitter.setup_parameters()
                 this_fitter.constrain_parameters(group="cen")
                 this_fitter.run_fit()
                 this_fitter.print_fit_result()
@@ -132,6 +131,7 @@ class TestRVFitter(unittest.TestCase):
                 #  this_fitter.setup_parameters()
                 #  this_fitter.constrain_parameters(group="amp")
                 this_fitter.shape_profile = "lorentzian"
+                this_fitter.setup_parameters()
                 this_fitter.run_fit()
                 this_fitter.print_fit_result()
                 filename = "B275_fit_results.pkl"
@@ -146,10 +146,11 @@ class TestRVFitter(unittest.TestCase):
                                 "B275_speclist.pkl")
 
         myfitter = RVFitter.load_from_df_file(filename=filename)
+        myfitter.shape_profile = "lorentzian"
+        myfitter.setup_parameters()
         myfitter.constrain_parameters(group="cen", constraint_type="epoch")
         myfitter.constrain_parameters(group="amp", constraint_type="line_profile")
         myfitter.constrain_parameters(group="sig", constraint_type="line_profile")
-        myfitter.shape_profile = "lorentzian"
         myfitter.run_fit()
         myfitter.print_fit_result(output_file="constraint_fits.txt")
         #  self.myfitter.plot_model_and_data()
@@ -160,6 +161,7 @@ class TestRVFitter(unittest.TestCase):
                                 "B275_speclist.pkl")
         myfitter = RVFitter.load_from_df_file(filename=filename)
         myfitter.shape_profile = "lorentzian"
+        myfitter.setup_parameters()
         myfitter.run_fit()
         myfitter.print_fit_result(output_file="unconstraint_fits.txt")
         #  self.myfitter.plot_model_and_data()
