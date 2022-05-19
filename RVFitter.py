@@ -404,13 +404,12 @@ class RVFitter(object):
                                  date=date,
                                  wavelength=wavelengths[0],
                                  flux=fluxes[0],
-                                 flux_errors=flux_errors[0])
+                                 flux_errors=flux_errors[0],
+                                 )
                 this_star.df = this_df
                 stars.append(this_star)
         this_instance = cls(stars=stars)
         this_instance.df = df
-        this_instance.setup_parameters()
-        #  __import__('ipdb').set_trace()
         return this_instance
 
     def get_fig_and_axes(self):
@@ -595,8 +594,10 @@ class RVFitter(object):
             return False
 
     def setup_parameters(self):
+        if self.shape_profile is None:
+            raise Exception("shape_profile not set")
         for star in self.stars:
-            star.setup_parameters()
+            star.setup_parameters(shape_profile=self.shape_profile)
         self.create_df(make=False)
         self.merge_parameters()
 
@@ -672,49 +673,40 @@ class RVFitter(object):
                     self.result.params[row["parameters"]["sig"]].value,
                     4), round(
                         self.result.params[row["parameters"]["sig"]].stderr, 4)
-                fwhm, err_fwhm = round(
-                    self.result.params[row["parameters"]["fwhm"]].value,
-                    4), round(
-                        self.result.params[row["parameters"]["fwhm"]].stderr,
-                        4)
                 centroid, err_centroid = round(
                     self.result.params[row["parameters"]["cen"]].value,
                     4), round(
                         self.result.params[row["parameters"]["cen"]].stderr, 4)
-                #  vsini, err_vsini = round(vsini_constant * fwhm, 4), round(vsini_constant * err_fwhm, 4)
                 height, err_height = round(
                     0.3183099 * amplitude / max(1.e-15, sigma),
                     4), round(0.3183099 * err_amplitude / max(1.e-15, sigma),
                               4)
+
                 print('-----------',
                       row["line_name"] + ' ' + str(line_profile),
                       '-----------')
                 print('Amplitude= ', '\t', amplitude, ' +/-\t', err_amplitude)
-                print('Height= ', '\t', height, ' +/-\t', err_height)
-                #            print 'FWHM=     ','\t',fwhm,' +/-\t',err_fwhm
                 print('Sigma=     ', '\t', sigma, ' +/-\t', err_sigma)
                 print('Centroid=     ', '\t', centroid, ' +/-\t', err_centroid)
-                print('RV=     ', '\t',
-                      const.c * ((centroid - line_profile) / line_profile),
-                      ' +/-\t', (err_centroid / centroid) * const.c)
-                #            print 'vsini=        ','\t',vsini,' +/-\t',err_vsini
+                if self.shape_profile == "voigt":
+                    amplitudeL, err_amplitudeL = round(
+                        self.result.params[row["parameters"]["ampL"]].value,
+                        4), round(
+                            self.result.params[row["parameters"]["ampL"]].stderr, 4)
+                    sigmaL, err_sigmaL = round(
+                        self.result.params[row["parameters"]["sigL"]].value,
+                        4), round(
+                            self.result.params[row["parameters"]["sigL"]].stderr, 4)
+                    centroidL, err_centroidL = round(
+                        self.result.params[row["parameters"]["cenL"]].value,
+                        4), round(
+                            self.result.params[row["parameters"]["cenL"]].stderr, 4)
+                    print('AmplitudeL= ', '\t', amplitudeL, ' +/-\t',
+                          err_amplitudeL)
+                    print('SigmaL=     ', '\t', sigmaL, ' +/-\t', err_sigmaL)
+                    print('CentroidL=     ', '\t', centroidL, ' +/-\t',
+                          err_centroidL)
 
-                file.write('\n')
-                file.write('Line profile ' + row["line_name"] + '\t' +
-                           str(line_profile) + '\n')
-                #            file.write('Amplitude '+'\t'+str(amplitude)+'\t'+str(err_amplitude)+'\n')
-                file.write('Amplitude ' + '\t' + str(height) + '\t' +
-                           str(err_height) + '\n')
-                #            file.write('FWHM '+'\t'+str(fwhm)+'\t'+str(err_fwhm)+'\n')
-                file.write('sigma ' + '\t' + str(sigma) + '\t' +
-                           str(err_sigma) + '\n')
-                file.write('centroid ' + '\t' + str(centroid) + '\t' +
-                           str(err_centroid) + '\n')
-                file.write('RV_line ' + '\t' + str((
-                    (centroid - line_profile) / line_profile) * 299792.458) +
-                           '\t' + str((err_centroid / centroid) * 299792.458) +
-                           '\n')
-            #           file.write('vsini '+'\t'+str(vsini)+'\t'+str(err_vsini)+'\n')
 
     def run_fit(self, objective=None):
         if objective is None:
@@ -752,6 +744,7 @@ class RVFitter(object):
         # prepare fitting
         this_fitter = copy.deepcopy(self)
         this_fitter.shape_profile = shape_profile
+        this_fitter.setup_parameters()
         this_fitter.label = shape_profile + " with constraints"
         this_fitter.constraints_applied = True
         this_fitter.constrain_parameters(group="cen", constraint_type="epoch")
@@ -759,6 +752,11 @@ class RVFitter(object):
                                          constraint_type="line_profile")
         this_fitter.constrain_parameters(group="sig",
                                          constraint_type="line_profile")
+        if shape_profile == "voigt":
+            this_fitter.constrain_parameters(group="ampL",
+                                             constraint_type="line_profile")
+            this_fitter.constrain_parameters(group="sigL",
+                                             constraint_type="line_profile")
         this_fitter.run_fit()
         return this_fitter
 
@@ -766,6 +764,7 @@ class RVFitter(object):
         # prepare fitting
         this_fitter = copy.deepcopy(self)
         this_fitter.shape_profile = shape_profile
+        this_fitter.setup_parameters()
         this_fitter.label = shape_profile + " without constraints"
         this_fitter.constraints_applied = False
         this_fitter.run_fit()
@@ -841,13 +840,15 @@ class RVFitter(object):
         return np.array(resid)
 
     @staticmethod
-    def shape(x, amp, cen, sigma, type="lorentzian"):
+    def shape(x, amp, cen, sigma, ampL=None, sigmaL=None, type="lorentzian"):
         if type == "gaussian":
             return 1 - amp * np.exp(-(x - cen)**2 / (2 * sigma**2))
         elif type == "lorentzian":
             return 1 - amp * (1 / (1 + ((x - cen) / sigma)**2))
         elif type == "voigt":
-            raise NotImplementedError
+            return 1 - (amp * (1 / (sigma * (np.sqrt(2*np.pi)))) * (np.exp(-((x - cen)**2) / ((2 * sigma)**2))) \
+                   + (ampL * sigmaL ** 2 / ((x - cen) ** 2 + sigmaL ** 2)))
+            # raise NotImplementedError
         else:
             raise ValueError("Unknown shape type")
 
@@ -858,7 +859,14 @@ class RVFitter(object):
         cen = params[par_names["cen"]]
         sig = params[par_names["sig"]]
         x = row["clipped_wlc_to_velocity"]
-        return __class__.shape(x, amp, cen, sig, type)
+        if type != "voigt":
+            shape_func = lambda x, amp, cen, sig, type: __class__.shape(x, amp, cen, sig, type=type)
+            return shape_func(x, amp, cen, sig, type=type)
+        else:
+            ampL = params[par_names["ampL"]]
+            sigmaL = params[par_names["sigL"]]
+            shape_func = __class__.shape
+            return shape_func(x, amp, cen, sig, ampL=ampL, sigmaL=sigmaL, type=type)
 
 
 class Star(object):
@@ -1059,7 +1067,7 @@ class Star(object):
                 df = df.append(this_df)
         self.df = df
 
-    def setup_parameters(self):
+    def setup_parameters(self, shape_profile):
         "Step 4. Fit gaussian by using lmfit"
         self.params = lmfit.Parameters()
         "Initialise variables ..."
@@ -1070,7 +1078,7 @@ class Star(object):
                 name=row["line_hash"], epoch=row["date"])
 
             self.params.add(amplitude, value=0.5,
-                            vary=True)  # , min=0.01,max=1.0
+                            vary=True, min=0)  # , min=0.01,max=1.0
             d["amp"] = amplitude
 
             cen = 'cen_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
@@ -1103,7 +1111,43 @@ class Star(object):
                 expr='2.3548200*sig_line_{name}_epoch_{epoch}'.format(
                     name=row["line_hash"], epoch=row["date"]))
             d["fwhm"] = fwhm
+
+            if shape_profile == "voigt":
+                amplitudeL = 'ampL_line_{name}_epoch_{epoch}'.format(
+                    name=row["line_hash"], epoch=row["date"])
+
+                self.params.add(amplitudeL, value=0.5,
+                                vary=True)  # , min=0.01,max=1.0
+                d["ampL"] = amplitudeL
+
+                sigL = 'sigL_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
+                                                             epoch=row["date"])
+                self.params.add(sigL, value=50, vary=True)  # , min=0.01,max=1.0
+                d["sigL"] = sigL
+                rv_shiftL = 'rv_shiftL_line_{name}_epoch_{epoch}'.format(
+                    name=row["line_hash"], epoch=row["date"])
+                self.params.add(
+                    rv_shiftL,
+                    value=200,
+                    vary=True,
+                    expr=
+                    '299792.458*(cen_line_{name}_epoch_{epoch} - {profile:4.2f})/{profile:4.2f}'
+                    .format(name=row["line_hash"],
+                            epoch=row["date"],
+                            profile=row["line_profile"]
+                            ))  # , min = 0.)  # , min=0.01,max=1.0
+                d["rv_shiftL"] = rv_shiftL
+                fwhmL = 'fwhmL_line_{name}_epoch{epoch}'.format(
+                    name=row["line_hash"], epoch=row["date"])
+                self.params.add(
+                    fwhmL,
+                    value=2.0,
+                    vary=True,
+                    expr='2.3548200*sig_line_{name}_epoch_{epoch}'.format(
+                        name=row["line_hash"], epoch=row["date"]))
+                d["fwhmL"] = fwhmL
             l_parameter_names.append(d)
+
         if "parameters" in self.df.columns:
             del self.df["parameters"]
         self.df["parameters"] = l_parameter_names
@@ -1179,12 +1223,14 @@ class RVFitter_comparison(object):
         df = pd.concat([df, this_df], axis=1)
         return df
 
-    def compare_fit_results(self, filename, variable, ax=None):
+    def compare_fit_results(self, filename, variable, fig_and_ax=None):
         if variable not in ["amp", "cen", "sig"]:
             raise Exception("Error: variable not in ['amp', 'cen', 'sig']")
 
-        if ax is None:
+        if fig_and_ax is None:
             fig, ax = plt.subplots(1, 1)
+        else:
+            fig, ax = fig_and_ax
 
         columns_to_plot  = [col for col in self.df.columns if col.startswith(variable)]
         #  print(columns_to_plot)
@@ -1214,3 +1260,36 @@ class RVFitter_comparison(object):
         ax.legend()
 
         fig.savefig(filename)
+
+    def plot_fits_and_residuals(self, color_dict={0: "red", 1: "blue", 2: "green", 3: "orange", 4: "purple", 5: "black"}):
+        fig, ax_dict = self.list_of_fitters[0].get_fig_and_ax_dict()
+
+        for idx, this_fitter in enumerate(self.list_of_fitters):
+            if idx == 0:
+                this_fitter.plot_data_and_residuals(fig=fig, ax_dict=ax_dict)
+            this_fitter.plot_fit_and_residuals(fig=fig,
+                                               ax_dict=ax_dict,
+                                               add_legend_label=True,
+                                               plot_dict={"zorder": 2.5,
+                                                          "markersize": "1",
+                                                          "color": color_dict[idx],
+                                                          },
+                                               plot_dict_res={
+                                                              "marker": ".",
+                                                              "linestyle": "None",
+                                                              "color": color_dict[idx],
+                                                              "markersize": "2"})
+        handles, labels = ax_dict[list(ax_dict.items())[0][0]].get_legend_handles_labels()
+        labels = [this_fitter.label for this_fitter in self.list_of_fitters]
+        fig.legend(handles, labels, ncol=2, loc='lower center')
+
+    def plot_fits_and_data(self, color_dict = {0: "red", 1: "blue", 2: "green", 3: "orange"}, filename=None):
+        fig, axes = self.list_of_fitters[0].get_fig_and_axes()
+        for idx, this_fitter in enumerate(self.list_of_fitters):
+            if idx == 0:
+                this_fitter.plot_data(fig=fig, axes=axes)
+            this_fitter.plot_fit(fig=fig, axes=axes, plot_dict={"zorder": 2.5, "color": color_dict[idx], "label": this_fitter.label})
+        handles, labels = axes[-1, -1].get_legend_handles_labels()
+        fig.legend(handles, labels, ncol=2, loc='lower center')
+        if filename is not None:
+            fig.savefig(filename)
