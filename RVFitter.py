@@ -126,7 +126,9 @@ class Line(object):
                    result,
                    type,
                    ax=None,
-                   plot_dict={"color": "r"}):
+                   plot_dict={"color": "r"},
+                   add_legend=False
+                   ):
         this_df = df.query('line_hash == @self.hash')
         row = this_df.T.squeeze()
         if ax is None:
@@ -140,17 +142,28 @@ class Line(object):
             1000)
 
         model = model_func(params=result.params, row=this_row, type=type)
+        #  print(this_row)
+        #  __import__('ipdb').set_trace()
+        if add_legend:
+            value = int(result.params[this_row["parameters"]["cen"]].value)
+            label = "{0} km/s".format(value)
+            plot_dict.update({"label": label})
 
         ax.plot(this_row["clipped_wlc_to_velocity"], model, **plot_dict)
 
+        if add_legend:
+            ax.legend()
 
     def plot_residuals(self,
-                   df,
-                   model_func,
-                   result,
-                   type,
-                   ax=None,
-                   plot_dict={"color": "r", "marker": "."}):
+                       df,
+                       model_func,
+                       result,
+                       type,
+                       ax=None,
+                       plot_dict={
+                           "color": "r",
+                           "marker": "."
+                       }):
         this_df = df.query('line_hash == @self.hash')
         row = this_df.T.squeeze()
         if ax is None:
@@ -162,10 +175,11 @@ class Line(object):
 
         model = model_func(params=result.params, row=this_row, type=type)
 
-        residuals = (this_row["clipped_flux"] - model) / this_row["clipped_error"]
+        residuals = (this_row["clipped_flux"] -
+                     model) / this_row["clipped_error"]
 
         ax.plot(this_row["clipped_wlc_to_velocity"], residuals, **plot_dict)
-        ax.set_ylim(np.abs(max(residuals))*(-1), np.abs(max(residuals)))
+        ax.set_ylim(np.abs(max(residuals)) * (-1), np.abs(max(residuals)))
 
     def plot_clipped_spectrum(self,
                               ax=None,
@@ -246,12 +260,14 @@ class Line(object):
             ax.set_title(title_prefix + title)
 
 
-class RVFitter(lmfit.Model):
+class RVFitter(object):
     """Docstring for RVFitter. """
     def __init__(self, stars, df_name=None, debug=False):
         self.stars = stars
         self.debug = debug
-        self.shape_profile = "lorentzian"
+        self.shape_profile = None
+        self.constraints_applied = None
+        self.label = None
         self.params = None
         self.star = list(set([item.starname for item in self.stars]))
 
@@ -270,20 +286,16 @@ class RVFitter(lmfit.Model):
         self.amp_base = 'amp_line_{name}_epoch_{epoch}'
         self.output_file = 'Params_' + self.star + '.dat'
         self.df_name = df_name
-        #  if self.df_name is not None:
-        #      self.df = pd.read_pickle(self.df_name)
-        #  else:
         if self.df_name is None:
             self.df = None
         else:
             self.df = pd.read_pickle(self.df_name)
 
-    #  @property
-    #  def df_name(self):
-    #      if not self.debug:
-    #          return self.specsfilelist_name.replace('.txt', '.pkl')
-    #      else:
-    #          return self.specsfilelist_name.replace('.txt', '_DEBUG.pkl')
+    def __str__(self):
+        return 'RVFitter(stars={stars})'.format(stars=self.stars[0].starname)
+
+    def __repr__(self):
+        return 'RVFitter(stars={stars})'.format(stars=self.stars)
 
     def create_df(self, make=True):
         l_dfs = []
@@ -310,16 +322,6 @@ class RVFitter(lmfit.Model):
 
         return line_names, line_profiles, wlc_windows
 
-    #  def make_line_objects(self):
-    #      lines = []
-    #      for name, profile, wlc in zip(self.line_names, self.line_profiles,
-    #                                    self.wlc_windows):
-    #          this_line = Line(line_name=name,
-    #                           line_profile=profile,
-    #                           wlc_window=wlc)
-    #          lines.append(this_line)
-    #      return lines
-
     def save_df(self, filename=None):
         if filename is None:
             file_to_write = self.df_name
@@ -329,15 +331,10 @@ class RVFitter(lmfit.Model):
         self.df.to_pickle(file_to_write)
 
     @classmethod
-    def create_fitter_from_df(cls):
-        pass
-
-    @classmethod
     def load_from_df_file(cls, filename):
         df = pd.read_pickle(filename)
         return cls.load_from_df(df)
 
-    # TODO: shouldn't this be a classmethod?
     @classmethod
     def load_from_df(cls, df):
         starnames = df['starname'].unique()
@@ -438,7 +435,8 @@ class RVFitter(lmfit.Model):
             res_ids = []
             for j, line in enumerate(star.lines):
                 line_ids.append(('{}_{}').format(star.date, line.line_profile))
-                res_ids.append(('{}_{}_res').format(star.date, line.line_profile))
+                res_ids.append(('{}_{}_res').format(star.date,
+                                                    line.line_profile))
             dates_list.append(line_ids)
             dates_list.append(res_ids)
 
@@ -450,7 +448,7 @@ class RVFitter(lmfit.Model):
             gridspec_kw={
                 "wspace": 0.3,
                 "hspace": 0,
-                "height_ratios": [5, 2]*len(self.stars),
+                "height_ratios": [5, 2] * len(self.stars),
                 # "width_ratios": [1]*len(self.stars),
             },
         )
@@ -471,18 +469,29 @@ class RVFitter(lmfit.Model):
     def plot_fit_and_residuals(self,
                                fig,
                                ax_dict,
-                               plot_dict={"zorder": 2.5, "color": "red"},
-                               plot_dict_res={"marker": ".", "linestyle": 'None', "color": "red"}):
-        for i, star in enumerate(self.stars):
-            for j, line in enumerate(star.lines):
-                this_ax = ax_dict[('{}_{}').format(star.date, line.line_profile)]
-                this_ax_res = ax_dict[('{}_{}_res').format(star.date, line.line_profile)]
+                               add_legend_label=False,
+                               plot_dict={
+                                   "zorder": 2.5,
+                                   "color": "red"
+                               },
+                               plot_dict_res={
+                                   "marker": ".",
+                                   "linestyle": 'None',
+                                   "color": "red"
+                               }):
+        for star in self.stars:
+            for line in star.lines:
+                this_ax = ax_dict[('{}_{}').format(star.date,
+                                                   line.line_profile)]
+                this_ax_res = ax_dict[('{}_{}_res').format(
+                    star.date, line.line_profile)]
 
                 line.plot_model(df=star.df,
                                 model_func=self.model,
                                 type=self.shape_profile,
                                 result=self.result,
                                 ax=this_ax,
+                                add_legend=add_legend_label,
                                 plot_dict=plot_dict)
                 line.plot_residuals(df=star.df,
                                     model_func=self.model,
@@ -495,17 +504,23 @@ class RVFitter(lmfit.Model):
                 # this_ax_res.set_ylim(-0.5, 0.5)
 
     def plot_data_and_residuals(self,
-                       fig,
-                       ax_dict,
-                       plot_dict={"fmt": '.', "color": "black","ecolor": "black"}):
+                                fig,
+                                ax_dict,
+                                plot_dict={
+                                    "fmt": '.',
+                                    "color": "black",
+                                    "ecolor": "black"
+                                }):
         for i, star in enumerate(self.stars):
             for j, line in enumerate(star.lines):
                 if i != 0:
                     title_prefix = 'no_title'
                 else:
                     title_prefix = None
-                this_ax = ax_dict[('{}_{}').format(star.date, line.line_profile)]
-                this_ax_res = ax_dict[('{}_{}_res').format(star.date, line.line_profile)]
+                this_ax = ax_dict[('{}_{}').format(star.date,
+                                                   line.line_profile)]
+                this_ax_res = ax_dict[('{}_{}_res').format(
+                    star.date, line.line_profile)]
                 line.plot_clipped_spectrum(ax=this_ax,
                                            plot_velocity=True,
                                            title_prefix=title_prefix,
@@ -712,15 +727,49 @@ class RVFitter(lmfit.Model):
                                      kws={"type": self.shape_profile})
 
     def save_fit_result(self, filename):
+        dict_to_dump = {
+            "result": self.result,
+            "label": self.label,
+            "shape_profile": self.shape_profile,
+            "constraints_applied": self.constraints_applied,
+        }
         with open(filename, "wb") as f:
-            pickle.dump(self.result, f)
+            pickle.dump(dict_to_dump, f)
+        print("Fit result saved to file: {filename}".format(filename=filename))
 
     def load_fit_result(self, filename):
         with open(filename, "rb") as f:
-            self.result = pickle.load(f)
+            data = pickle.load(f)
+        self.result = data["result"]
+        self.label = data["label"]
+        self.shape_profile = data["shape_profile"]
+        self.constraints_applied = data["constraints_applied"]
 
-    def plot_fit_result(self):
-        pass
+        print(
+            "Load fit result from file: {filename}".format(filename=filename))
+
+    def fit_with_constraints(self, shape_profile="gaussian"):
+        # prepare fitting
+        this_fitter = copy.deepcopy(self)
+        this_fitter.shape_profile = shape_profile
+        this_fitter.label = shape_profile + " with constraints"
+        this_fitter.constraints_applied = True
+        this_fitter.constrain_parameters(group="cen", constraint_type="epoch")
+        this_fitter.constrain_parameters(group="amp",
+                                         constraint_type="line_profile")
+        this_fitter.constrain_parameters(group="sig",
+                                         constraint_type="line_profile")
+        this_fitter.run_fit()
+        return this_fitter
+
+    def fit_without_constraints(self, shape_profile="gaussian"):
+        # prepare fitting
+        this_fitter = copy.deepcopy(self)
+        this_fitter.shape_profile = shape_profile
+        this_fitter.label = shape_profile + " without constraints"
+        this_fitter.constraints_applied = False
+        this_fitter.run_fit()
+        return this_fitter
 
     def get_df_from_star(self, name, date):
         query = "starname == '{name}' & date == '{date}'".format(name=name,
@@ -832,6 +881,10 @@ class Star(object):
         self.date_time_obj = datetime.strptime(self.date, datetime_formatter)
         self.lines = lines
         self.parameters = {}
+
+    def __repr__(self):
+        return "Star: {starname} on {date}".format(starname=self.starname,
+                                                   date=self.date)
 
     def get_line_by_hash(self, hash):
         for line in self.lines:
@@ -1055,20 +1108,23 @@ class Star(object):
             del self.df["parameters"]
         self.df["parameters"] = l_parameter_names
 
+
 class RVFitter_comparison(object):
-
     """Docstring for RVFitter_comparison. """
-
-    def __init__(self, dict_of_fitters):
-        self.dict_of_fitters = dict_of_fitters
+    def __init__(self, list_of_fitters):
+        self.list_of_fitters = list_of_fitters
 
     def create_overview_df(self):
         df = pd.DataFrame()
-        for key, fitter in self.dict_of_fitters.items():
-            df = self.add_parameters_to_df(df=df, fitter=fitter, suffix="_" + key)
+        for fitter in self.list_of_fitters:
+            if fitter.constraints_applied:
+                suffix = fitter.shape_profile + "_with_constraints"
+            else:
+                suffix = fitter.shape_profile + "_without_constraints"
+            df = self.add_parameters_to_df(df=df,
+                                           fitter=fitter,
+                                           suffix="_" + suffix)
         self.df = df
-
-
 
     def add_parameters_to_df(self, df, fitter, suffix):
         l_amp = []
@@ -1090,24 +1146,71 @@ class RVFitter_comparison(object):
             l_error_cen.append(fitter.result.params[cen].stderr)
             l_error_sig.append(fitter.result.params[sig].stderr)
 
-        this_df = pd.DataFrame({"date" + suffix: fitter.df["date"],
-            "line_profile" + suffix: fitter.df["line_profile"],
-            "amp" + suffix: l_amp,
-            "cen" + suffix: l_cen,
-            "sig" + suffix: l_sig,
-            "error_amp" + suffix: l_error_amp,
-            "error_cen" + suffix: l_error_cen,
-            "error_sig" + suffix: l_error_sig
-            })
+        this_df = pd.DataFrame({
+            "date" + suffix:
+            fitter.df["date"],
+            "line_profile" + suffix:
+            fitter.df["line_profile"],
+            "amp" + suffix:
+            l_amp,
+            "cen" + suffix:
+            l_cen,
+            "sig" + suffix:
+            l_sig,
+            "error_amp" + suffix:
+            l_error_amp,
+            "error_cen" + suffix:
+            l_error_cen,
+            "error_sig" + suffix:
+            l_error_sig
+        })
 
         for col in df.columns:
             if "date" in col:
                 check = df[col] == this_df["date" + suffix]
                 if np.sum(check) != len(check):
                     raise Exception("Error: date mismatch")
+                df["date"] = df[col]
             if "line_profile" in col:
                 check = df[col] == this_df["line_profile" + suffix]
                 if np.sum(check) != len(check):
                     raise Exception("Error: line_profile mismatch")
+                df["line_profile"] = df[col]
         df = pd.concat([df, this_df], axis=1)
         return df
+
+    def compare_fit_results(self, filename, variable, ax=None):
+        if variable not in ["amp", "cen", "sig"]:
+            raise Exception("Error: variable not in ['amp', 'cen', 'sig']")
+
+        if ax is None:
+            fig, ax = plt.subplots(1, 1)
+
+        columns_to_plot  = [col for col in self.df.columns if col.startswith(variable)]
+        #  print(columns_to_plot)
+        dates = self.df["date"].unique()
+        for date in dates:
+            this_df = self.df[self.df["date"] == date]
+
+            p = ax.plot(this_df[variable + '_gaussian_without_constraints'],
+                        this_df[variable + '_lorentzian_without_constraints'],
+                        'o',
+                        label=date + " (no constraints)")
+            color = p[0].get_color()
+            ax.plot(this_df[variable + '_gaussian_with_constraints'],
+                    this_df[variable + '_lorentzian_with_constraints'],
+                    'x',
+                    color=color,
+                    label=date + " (with constraints)")
+        mins = self.df[columns_to_plot].min()
+        maxes = self.df[columns_to_plot].max()
+
+        ax.plot(np.linspace(np.min(mins), np.max(maxes), 1000),
+                np.linspace(np.min(mins), np.max(maxes), 1000),
+                '--',
+                label="1:1")
+        ax.set_xlabel(variable + ' gaussian')
+        ax.set_ylabel(variable + ' lorentzian')
+        ax.legend()
+
+        fig.savefig(filename)
