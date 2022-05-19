@@ -35,38 +35,21 @@ class TestRVFitter_Comparison(unittest.TestCase):
         self.myfitter = RVFitter.load_from_df_file(filename=filename)
 
     def test_table(self):
-        collected_fitters = {}
+        collected_fitters = []
         for shape_profile in ["gaussian", "lorentzian"]:
-            this_fitter = fit_without_constraints(self.myfitter, shape_profile=shape_profile)
+            this_fitter = self.myfitter.fit_without_constraints(shape_profile=shape_profile)
             this_fitter.label = shape_profile + " without constraints"
-            collected_fitters["no_constraint_" + shape_profile] = this_fitter
+            collected_fitters.append(this_fitter)
 
-            this_fitter = fit_with_constraints(self.myfitter, shape_profile=shape_profile)
+            this_fitter = self.myfitter.fit_with_constraints(shape_profile=shape_profile)
             this_fitter.label = shape_profile + " with constraints"
-            collected_fitters["constraint_" + shape_profile] = this_fitter
+            collected_fitters.append(this_fitter)
 
         #  print(collected_fitterk
 
-        comparer = RVFitter_comparison(dict_of_fitters=collected_fitters)
+        comparer = RVFitter_comparison(list_of_fitters=collected_fitters)
         comparer.create_overview_df()
         print(comparer.df)
-
-def fit_with_constraints(myfitter, shape_profile="gaussian"):
-    # prepare fitting
-    this_fitter = copy.deepcopy(myfitter)
-    this_fitter.shape_profile = shape_profile
-    this_fitter.constrain_parameters(group="cen", constraint_type="epoch")
-    this_fitter.constrain_parameters(group="amp", constraint_type="line_profile")
-    this_fitter.constrain_parameters(group="sig", constraint_type="line_profile")
-    this_fitter.run_fit()
-    return this_fitter
-
-def fit_without_constraints(myfitter, shape_profile="gaussian"):
-    # prepare fitting
-    this_fitter = copy.deepcopy(myfitter)
-    this_fitter.shape_profile = shape_profile
-    this_fitter.run_fit()
-    return this_fitter
 
 if __name__ == "__main__":
     unittest.main()
