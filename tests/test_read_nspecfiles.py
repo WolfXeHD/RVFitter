@@ -73,7 +73,7 @@ class TestRVObject(unittest.TestCase):
             line.plot_normed_spectrum(ax)
             figname = "DEBUG_normed_" + line.line_name + ".png"
             if "\\" in figname:
-                figname  figname.replace("\\", "_")
+                figname = figname.replace("\\", "_")
             plt.savefig(figname)
 
         for line in mytest.lines:
