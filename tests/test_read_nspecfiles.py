@@ -3,7 +3,7 @@ import pkg_resources
 import os
 import matplotlib.pyplot as plt
 
-from RVFitter.RVFitter import Star
+from RVFitter import Star
 
 
 def id_func(specsfile):

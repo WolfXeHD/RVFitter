@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from RVFitter.RVFitter import RVFitter, RVFitter_comparison
+from RVFitter import RVFitter, RVFitter_comparison
 import pkg_resources
 import os
 import copy

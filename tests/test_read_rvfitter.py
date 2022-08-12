@@ -5,7 +5,7 @@ import numpy as np
 import copy
 import matplotlib.pyplot as plt
 
-from RVFitter.RVFitter import RVFitter
+from RVFitter import RVFitter
 
 
 def id_func(specsfile):
