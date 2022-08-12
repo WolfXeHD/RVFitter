@@ -186,6 +186,7 @@ class TestRVFitter(unittest.TestCase):
             query = "(starname == '{starname}') & (date == '{date}')".format(
                 starname=star.starname, date=star.date)
             this_df = myfitter.df.query(query)
+            print(this_df)
             self.assertEqual(len(this_df), len(star.lines))
 
             for (_, row), line in zip(this_df.iterrows(), star.lines):
@@ -202,8 +203,8 @@ class TestRVFitter(unittest.TestCase):
 
                 # TODO check what is happening with these two tests
                 #    self.assertEqual(line.rightValueNorm , row['rightValueNorm'])
-                self.assertEqual(line.leftClip, row['leftClip'])
-                self.assertEqual(line.rightClip, row['rightClip'])
+                self.assertEqual(line.leftClip.any(), row['leftClip'].any())
+                self.assertEqual(line.rightClip.any(), row['rightClip'].any())
                 self.assertEqual(line.clipped_wlc.any(),
                                  row['clipped_wlc'].any())
                 self.assertEqual(line.clipped_flux.any(),
