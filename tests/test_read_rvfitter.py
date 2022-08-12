@@ -102,8 +102,6 @@ class TestRVFitter(unittest.TestCase):
         self.myfitter.print_fit_result()
 
     def test_single_star_fitting(self):
-        #  filename = os.path.join(os.path.dirname(self.specsfilelist),
-        #  "B111_speclist_Tim.pkl")
         filename = os.path.join(os.path.dirname(self.specsfilelist),
                                 "B275_speclist.pkl")
         myfitter = RVFitter.load_from_df_file(filename=filename)
@@ -181,7 +179,7 @@ class TestRVFitter(unittest.TestCase):
 
     def test_loading_from_df(self):
         filename = os.path.join(os.path.dirname(self.specsfilelist),
-                                "B111_speclist_Tim.pkl")
+                                "B275_speclist.pkl")
         myfitter = RVFitter.load_from_df_file(filename=filename)
 
         for star in myfitter.stars:
