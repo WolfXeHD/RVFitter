@@ -14,7 +14,7 @@ with open('requirements.txt') as f:
 
 setuptools.setup(
     name="RVFitter",
-    version="0.0.0",
+    version="0.0.1",
     author="Tim Michel Heinz Wolf",
     description="Organiation of files for RV finding and fitting",
     #  long_description=long_description + '\n\n' + history,
@@ -26,7 +26,7 @@ setuptools.setup(
         'flake8',
     ],
     python_requires='>=3.7',
-    #  url="https://github.com/XENONnT/GOFevaluation",
+    url="https://github.com/WolfXeHD/RVFitter",
     packages=setuptools.find_packages(),
     package_data = {"RVFitter": ["tests/test_data"]},
     classifiers=[
