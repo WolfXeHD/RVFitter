@@ -13,7 +13,7 @@ with open('requirements.txt') as f:
 #      history = file.read()
 
 setuptools.setup(
-    name="RVFinder",
+    name="RVFitter",
     version="0.0.0",
     author="Tim Michel Heinz Wolf",
     description="Organiation of files for RV finding and fitting",
@@ -25,12 +25,11 @@ setuptools.setup(
         'pytest',
         'flake8',
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     #  url="https://github.com/XENONnT/GOFevaluation",
     packages=setuptools.find_packages(),
-    package_data = {"RVFinder": ["tests/test_data"]},
+    package_data = {"RVFitter": ["tests/test_data"]},
     classifiers=[
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
