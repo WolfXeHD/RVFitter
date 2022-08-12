@@ -3,7 +3,7 @@ import unittest
 
 import numpy as np
 
-from RVFitter import RVFitter, RVFitter_comparison
+from RVFitter.RVFitter import RVFitter, RVFitter_comparison
 import pkg_resources
 import os
 import copy
@@ -27,9 +27,9 @@ class TestRVFitter_Comparison(unittest.TestCase):
     def setUp(self):
         line_list = pkg_resources.resource_filename(
             "RVFitter",
-            "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
+            "../tests/test_data/debug_spectral_lines_RVmeasurement.txt")
         self.specsfilelist = pkg_resources.resource_filename(
-            "RVFitter", "tests/test_data/debug_specfile_list.txt")
+            "RVFitter", "../tests/test_data/debug_specfile_list.txt")
         filename = os.path.join(os.path.dirname(self.specsfilelist),
                                 "B275_speclist.pkl")
         self.myfitter = RVFitter.load_from_df_file(filename=filename)

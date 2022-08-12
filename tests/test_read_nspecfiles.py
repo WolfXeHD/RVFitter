@@ -3,7 +3,7 @@ import pkg_resources
 import os
 import matplotlib.pyplot as plt
 
-from RVFitter import Star
+from RVFitter.RVFitter import Star
 
 
 def id_func(specsfile):
@@ -17,11 +17,12 @@ def id_func(specsfile):
 
 class TestRVObject(unittest.TestCase):
     test_datafile = pkg_resources.resource_filename(
-        "RVFitter", "tests/test_data/B275_UVBVIS_20190605T07_barycor.nspec")
+        "RVFitter", "../tests/test_data/B275_UVBVIS_20190605T07_barycor.nspec")
+    print(test_datafile)
     line_list = pkg_resources.resource_filename(
-        "RVFitter", "tests/test_data/spectral_lines_RVmeasurement.txt")
+        "RVFitter", "../tests/test_data/spectral_lines_RVmeasurement.txt")
     line_list_debug = pkg_resources.resource_filename(
-        "RVFitter", "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
+        "RVFitter", "../tests/test_data/debug_spectral_lines_RVmeasurement.txt")
 
     mytest = Star.from_specsfile(starname="B275",
                                      date="20190605T07",
@@ -30,7 +31,7 @@ class TestRVObject(unittest.TestCase):
 
     def test_plotting(self):
         line_list = pkg_resources.resource_filename(
-            "RVFitter", "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
+            "RVFitter", "../tests/test_data/debug_spectral_lines_RVmeasurement.txt")
         mytest = Star.from_specsfile_flexi(specsfile=self.test_datafile,
                                                id_func=id_func,
                                                line_list=line_list)
@@ -45,10 +46,10 @@ class TestRVObject(unittest.TestCase):
     def test_norming(self):
         test_datafile = pkg_resources.resource_filename(
             "RVFitter",
-            "tests/test_data/B275_UVBVIS_20190605T07_barycor.nspec")
+            "../tests/test_data/B275_UVBVIS_20190605T07_barycor.nspec")
         line_list = pkg_resources.resource_filename(
             "RVFitter",
-            "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
+            "../tests/test_data/debug_spectral_lines_RVmeasurement.txt")
         mytest = Star.from_specsfile(starname="B275",
                                          date="20190605T07",
                                          specsfile=test_datafile,
