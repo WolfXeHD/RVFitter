@@ -26,7 +26,7 @@ setuptools.setup(
         'flake8',
     ],
     python_requires='>=3.7',
-    #  url="https://github.com/XENONnT/GOFevaluation",
+    url="https://github.com/WolfXeHD/RVFitter",
     packages=setuptools.find_packages(),
     package_data = {"RVFitter": ["tests/test_data"]},
     classifiers=[
