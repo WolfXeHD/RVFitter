@@ -16,39 +16,46 @@ def id_func(specsfile):
 
 
 class TestRVObject(unittest.TestCase):
-    #  test_datafile = pkg_resources.resource_filename(
-    #      "RVFitter", "../tests/test_data/B275_UVBVIS_20190605T07_barycor.nspec")
-    #  print(test_datafile)
-    test_datafile = os.path.join(os.path.dirname(__file__), 'test_data/B275_UVBVIS_20190605T07_barycor.nspec')
+    test_datafile = os.path.join(
+        os.path.dirname(__file__),
+        'test_data/B275_UVBVIS_20190605T07_barycor.nspec')
 
-    line_list = os.path.join(os.path.dirname(__file__), 'test_data/spectral_lines_RVmeasurement.txt')
-    line_list_debug = os.path.join(os.path.dirname(__file__), 'test_data/debug_spectral_lines_RVmeasurement.txt')
+    line_list = os.path.join(os.path.dirname(__file__),
+                             'test_data/spectral_lines_RVmeasurement.txt')
+    line_list_debug = os.path.join(
+        os.path.dirname(__file__),
+        'test_data/debug_spectral_lines_RVmeasurement.txt')
 
     mytest = Star.from_specsfile(starname="B275",
-                                     date="20190605T07",
-                                     specsfile=test_datafile,
-                                     line_list=line_list)
+                                 date="20190605T07",
+                                 specsfile=test_datafile,
+                                 line_list=line_list)
 
     def test_plotting(self):
-        line_list = os.path.join(os.path.dirname(__file__), 'test_data/spectral_lines_RVmeasurement.txt')
+        line_list = os.path.join(os.path.dirname(__file__),
+                                 'test_data/spectral_lines_RVmeasurement.txt')
         mytest = Star.from_specsfile_flexi(specsfile=self.test_datafile,
-                                               id_func=id_func,
-                                               line_list=line_list)
+                                           id_func=id_func,
+                                           line_list=line_list)
         for line in mytest.lines:
             fig, ax = plt.subplots()
             mytest.plot_line(line, ax=ax)
             figname = "DEBUG_" + line.line_name + ".png"
+            if "\\" in figname:
+                figname.replace("\\", "_")
             plt.savefig(figname)
-            #  plt.show()
-            #  plt.close()
 
     def test_norming(self):
-        test_datafile = os.path.join(os.path.dirname(__file__), 'test_data/B275_UVBVIS_20190605T07_barycor.nspec')
-        line_list = os.path.join(os.path.dirname(__file__), 'test_data/debug_spectral_lines_RVmeasurement.txt')
+        test_datafile = os.path.join(
+            os.path.dirname(__file__),
+            'test_data/B275_UVBVIS_20190605T07_barycor.nspec')
+        line_list = os.path.join(
+            os.path.dirname(__file__),
+            'test_data/debug_spectral_lines_RVmeasurement.txt')
         mytest = Star.from_specsfile(starname="B275",
-                                         date="20190605T07",
-                                         specsfile=test_datafile,
-                                         line_list=line_list)
+                                     date="20190605T07",
+                                     specsfile=test_datafile,
+                                     line_list=line_list)
 
         limits = []
         limits.append([0.95, 1.01])
