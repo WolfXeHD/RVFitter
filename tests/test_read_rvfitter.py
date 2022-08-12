@@ -67,11 +67,11 @@ def get_tmp_file(filename):
 
 class TestRVFitter(unittest.TestCase):
     def setUp(self):
-        self.line_list = pkg_resources.resource_filename(
-            "RVFitter",
-            "../tests/test_data/debug_spectral_lines_RVmeasurement.txt")
-        self.specsfilelist = pkg_resources.resource_filename(
-            "RVFitter", "../tests/test_data/debug_specfile_list.txt")
+        self.line_list = os.path.join(
+            os.path.dirname(__file__),
+            'test_data/debug_spectral_lines_RVmeasurement.txt')
+        self.specsfilelist = os.path.join(os.path.dirname(__file__),
+                                          'test_data/debug_specfile_list.txt')
 
         tmp_specsfilelist = get_tmp_file(self.specsfilelist)
 
@@ -79,8 +79,7 @@ class TestRVFitter(unittest.TestCase):
             specsfilelist_name=tmp_specsfilelist,
             id_func=id_func,
             line_list=self.line_list,
-            share_line_hashes=True
-            )
+            share_line_hashes=True)
 
     def test_fitting(self):
         for star in self.myfitter.stars:
@@ -114,8 +113,7 @@ class TestRVFitter(unittest.TestCase):
         for starname in starnames:
             for date in dates:
                 print("\n\nFitting star {} on date {}".format(starname, date))
-                star_df = myfitter.get_df_from_star(name=starname,
-                                                         date=date)
+                star_df = myfitter.get_df_from_star(name=starname, date=date)
                 this_fitter = RVFitter.load_from_df(df=star_df)
                 #  this_fitter.setup_parameters()
                 this_fitter.shape_profile = "lorentzian"
@@ -123,7 +121,6 @@ class TestRVFitter(unittest.TestCase):
                 this_fitter.constrain_parameters(group="cen")
                 this_fitter.run_fit()
                 this_fitter.print_fit_result()
-
 
                 print("\n\n")
 
@@ -149,8 +146,10 @@ class TestRVFitter(unittest.TestCase):
         myfitter.shape_profile = "lorentzian"
         myfitter.setup_parameters()
         myfitter.constrain_parameters(group="cen", constraint_type="epoch")
-        myfitter.constrain_parameters(group="amp", constraint_type="line_profile")
-        myfitter.constrain_parameters(group="sig", constraint_type="line_profile")
+        myfitter.constrain_parameters(group="amp",
+                                      constraint_type="line_profile")
+        myfitter.constrain_parameters(group="sig",
+                                      constraint_type="line_profile")
         myfitter.run_fit()
         myfitter.print_fit_result(output_file="constraint_fits.txt")
         #  self.myfitter.plot_model_and_data()

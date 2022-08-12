@@ -6,11 +6,12 @@ from RVFitter import RVFitter
 
 class TestRVFitter(unittest.TestCase):
     def setUp(self):
-    #      self.line_list = pkg_resources.resource_filename(
-    #          "RVFitter",
-    #          "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
-        self.specsfilelist = pkg_resources.resource_filename(
-            "RVFitter", "tests/test_data/debug_specfile_list.txt")
+        #      self.line_list = pkg_resources.resource_filename(
+        #          "RVFitter",
+        #          "tests/test_data/debug_spectral_lines_RVmeasurement.txt")
+        self.specsfilelist = os.path.join(os.path.dirname(__file__),
+                                          'test_data/debug_specfile_list.txt')
+
     #
     #      tmp_specsfilelist = get_tmp_file(self.specsfilelist)
     #
