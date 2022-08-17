@@ -11,6 +11,7 @@ import numpy as np
 import pickle
 import copy
 import os
+import sigfig
 import ipdb
 
 # TODO: add a unique identifier for a line which can be used as key for parameters
@@ -93,7 +94,7 @@ class Line(object):
         self.clipped_flux = self.normed_flux
 
         masker = (self.clipped_wlc < (self.line_profile + self.wlc_window)) & (
-            self.clipped_wlc > (self.line_profile - self.wlc_window))
+                self.clipped_wlc > (self.line_profile - self.wlc_window))
         # get indices from array of wavelengths
 
         self.clipped_wlc = self.clipped_wlc[masker]
@@ -142,8 +143,6 @@ class Line(object):
             1000)
 
         model = model_func(params=result.params, row=this_row, type=type)
-        #  print(this_row)
-        #  __import__('ipdb').set_trace()
         if add_legend:
             value = int(result.params[this_row["parameters"]["cen"]].value)
             label = "{0} km/s".format(value)
@@ -441,6 +440,7 @@ class RVFitter(object):
 
         fig = plt.figure(constrained_layout=False,
                          figsize=(4 * len(self.lines), 4 * len(self.stars)))
+        # constrained_layout=True doesn't allow hspace to be 0
         ax_dict = fig.subplot_mosaic(
             dates_list,
             sharex=False,
@@ -525,6 +525,11 @@ class RVFitter(object):
                                            title_prefix=title_prefix,
                                            plot_dict=plot_dict)
                 this_ax_res.set_xlabel("Velocity (km/s)")
+                if j == 0:
+                    this_ax.text(-0.5, 0.5, star.date,
+                                 horizontalalignment='right',
+                                 verticalalignment='center',
+                                 rotation='vertical', transform=this_ax.transAxes, fontsize=14)
 
     def plot_data(self,
                   fig,
@@ -842,12 +847,12 @@ class RVFitter(object):
     @staticmethod
     def shape(x, amp, cen, sigma, ampL=None, sigmaL=None, type="lorentzian"):
         if type == "gaussian":
-            return 1 - amp * np.exp(-(x - cen)**2 / (2 * sigma**2))
+            return 1 - amp * np.exp(-(x - cen) ** 2 / (2 * sigma ** 2))
         elif type == "lorentzian":
-            return 1 - amp * (1 / (1 + ((x - cen) / sigma)**2))
+            return 1 - amp * (1 / (1 + ((x - cen) / sigma) ** 2))
         elif type == "voigt":
-            return 1 - (amp * (1 / (sigma * (np.sqrt(2*np.pi)))) * (np.exp(-((x - cen)**2) / ((2 * sigma)**2))) \
-                   + (ampL * sigmaL ** 2 / ((x - cen) ** 2 + sigmaL ** 2)))
+            return 1 - (amp * (1 / (sigma * (np.sqrt(2 * np.pi)))) * (np.exp(-((x - cen) ** 2) / ((2 * sigma) ** 2))) \
+                        + (ampL * sigmaL ** 2 / ((x - cen) ** 2 + sigmaL ** 2)))
             # raise NotImplementedError
         else:
             raise ValueError("Unknown shape type")
@@ -1097,10 +1102,10 @@ class Star(object):
                 vary=True,
                 expr=
                 '299792.458*(cen_line_{name}_epoch_{epoch} - {profile:4.2f})/{profile:4.2f}'
-                .format(name=row["line_hash"],
-                        epoch=row["date"],
-                        profile=row["line_profile"]
-                        ))  # , min = 0.)  # , min=0.01,max=1.0
+                    .format(name=row["line_hash"],
+                            epoch=row["date"],
+                            profile=row["line_profile"]
+                            ))  # , min = 0.)  # , min=0.01,max=1.0
             d["rv_shift"] = rv_shift
             fwhm = 'fwhm_line_{name}_epoch{epoch}'.format(
                 name=row["line_hash"], epoch=row["date"])
@@ -1121,7 +1126,7 @@ class Star(object):
                 d["ampL"] = amplitudeL
 
                 sigL = 'sigL_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
-                                                             epoch=row["date"])
+                                                               epoch=row["date"])
                 self.params.add(sigL, value=50, vary=True)  # , min=0.01,max=1.0
                 d["sigL"] = sigL
                 rv_shiftL = 'rv_shiftL_line_{name}_epoch_{epoch}'.format(
@@ -1132,10 +1137,10 @@ class Star(object):
                     vary=True,
                     expr=
                     '299792.458*(cen_line_{name}_epoch_{epoch} - {profile:4.2f})/{profile:4.2f}'
-                    .format(name=row["line_hash"],
-                            epoch=row["date"],
-                            profile=row["line_profile"]
-                            ))  # , min = 0.)  # , min=0.01,max=1.0
+                        .format(name=row["line_hash"],
+                                epoch=row["date"],
+                                profile=row["line_profile"]
+                                ))  # , min = 0.)  # , min=0.01,max=1.0
                 d["rv_shiftL"] = rv_shiftL
                 fwhmL = 'fwhmL_line_{name}_epoch{epoch}'.format(
                     name=row["line_hash"], epoch=row["date"])
@@ -1155,8 +1160,14 @@ class Star(object):
 
 class RVFitter_comparison(object):
     """Docstring for RVFitter_comparison. """
-    def __init__(self, list_of_fitters):
+    def __init__(self, list_of_fitters, output_folder='.'):
         self.list_of_fitters = list_of_fitters
+        stars = [fitter.star for fitter in list_of_fitters]
+        # check if all elements of stars are equal
+        if len(set(stars)) != 1:
+            raise ValueError("All stars must be equal")
+        self.star = stars[0]
+        self.output_folder = output_folder
 
     def create_overview_df(self):
         df = pd.DataFrame()
@@ -1192,21 +1203,23 @@ class RVFitter_comparison(object):
 
         this_df = pd.DataFrame({
             "date" + suffix:
-            fitter.df["date"],
+                fitter.df["date"],
             "line_profile" + suffix:
-            fitter.df["line_profile"],
+                fitter.df["line_profile"],
             "amp" + suffix:
-            l_amp,
+                l_amp,
             "cen" + suffix:
-            l_cen,
+                l_cen,
             "sig" + suffix:
-            l_sig,
+                l_sig,
             "error_amp" + suffix:
-            l_error_amp,
+                l_error_amp,
             "error_cen" + suffix:
-            l_error_cen,
+                l_error_cen,
             "error_sig" + suffix:
-            l_error_sig
+                l_error_sig,
+            "line_name" + suffix:
+                fitter.df["line_name"]
         })
 
         for col in df.columns:
@@ -1220,48 +1233,136 @@ class RVFitter_comparison(object):
                 if np.sum(check) != len(check):
                     raise Exception("Error: line_profile mismatch")
                 df["line_profile"] = df[col]
+            if "line_name" in col:
+                check = df[col] == this_df["line_name" + suffix]
+                if np.sum(check) != len(check):
+                    raise Exception("Error: line_name mismatch")
+                df["line_name"] = df[col]
         df = pd.concat([df, this_df], axis=1)
         return df
 
-    def compare_fit_results(self, filename, variable, fig_and_ax=None):
+    def write_overview_table(self, variable):
         if variable not in ["amp", "cen", "sig"]:
             raise Exception("Error: variable not in ['amp', 'cen', 'sig']")
 
-        if fig_and_ax is None:
-            fig, ax = plt.subplots(1, 1)
-        else:
-            fig, ax = fig_and_ax
-
-        columns_to_plot  = [col for col in self.df.columns if col.startswith(variable)]
-        #  print(columns_to_plot)
+        columns_constraints = [col for col in self.df.columns if (variable in col)
+                                  and ("with_constraints" in col)]
+        columns_no_constraints = [col for col in self.df.columns if (variable in col)
+                                             and ("without_constraints" in col) and ("error" not in col)]
+        errors_no_constraints = [col for col in self.df.columns if (variable in col)
+                                             and ("without_constraints" in col) and ("error" in col)]
         dates = self.df["date"].unique()
+
+        df = pd.DataFrame()
+        new_df = {}
         for date in dates:
+            new_df['date'] = date
+            temp_df = self.df[self.df["date"] == date]
+            for col, ecol in zip(columns_no_constraints, errors_no_constraints):
+                new_df[col] = temp_df[col].median()
+                new_df[ecol] = temp_df[ecol].std()
+            for col in columns_constraints:
+                new_df[col] = temp_df[col].median()
+            df = df.append(new_df, ignore_index=True)
+
+        l_names = ["date"]
+        for shape_profile in ["gaussian", "lorentzian"]:
+            for constraint in [True, False]:
+                subscript = self.get_subscript(shape_profile, constraint)
+                name = "$v_{" + subscript + "}$ (km/s)"
+                l_names.append(name)
+                df[name] = df.apply(lambda x: self.adjust_table(x, shape_profile=shape_profile, constraint=constraint,
+                                                                                    apply_cutoff=False), axis=1)
+        table_data = df[l_names].to_latex(escape=False, index=False, column_format="c" * len(l_names))
+        table_name = os.path.join(self.output_folder, "results_" + self.star + "_" + variable + ".tex")
+        with open(table_name, "w") as f:
+            f.write(table_data)
+        print(table_name, "written.")
+
+    @staticmethod
+    def get_subscript(shape_profile, constraint):
+        to_return = ""
+        if shape_profile == "gaussian":
+            to_return += "G"
+        elif shape_profile == "lorentzian":
+            to_return += "L"
+        elif shape_profile == "voigt":
+            to_return += "V"
+
+        if constraint:
+            to_return += "wc"
+        else:
+            to_return += "nc"
+        return to_return
+
+
+    @staticmethod
+    def adjust_table(x, shape_profile, constraint, apply_cutoff=False):
+        if constraint:
+            constraint_string = "with"
+        else:
+            constraint_string = "without"
+        if apply_cutoff:
+            val = sigfig.round(x[f"cen_{shape_profile}_{constraint_string}_constraints"], x[f"error_cen_{shape_profile}_{constraint_string}_constraints"], cutoff=1000, separation=' \pm ')
+        else:
+            val = sigfig.round(x[f"cen_{shape_profile}_{constraint_string}_constraints"], x[f"error_cen_{shape_profile}_{constraint_string}_constraints"], separation=' \pm ')
+        return "$" + val + "$"
+
+
+    def compare_fit_results_1D(self, variable, fig_and_ax=None):
+        if variable not in ["amp", "cen", "sig"]:
+            raise Exception("Error: variable not in ['amp', 'cen', 'sig']")
+
+        columns_to_plot = [col for col in self.df.columns if (variable in col) and ("error" not in col)]
+
+        dates = self.df["date"].unique()
+
+        if fig_and_ax is None:
+            fig, axes = plt.subplots(len(dates), 1, sharex=True)
+        else:
+            fig, axes = fig_and_ax
+        fig.suptitle('Comparison of fit results for ' + self.star)
+        plt.subplots_adjust(hspace=0.3, bottom=0.25, left=0.15)
+        #  print(columns_to_plot)
+        for i, (ax, date) in enumerate(zip(axes, dates)):
+            ax.set_title(date, fontsize=10)
             this_df = self.df[self.df["date"] == date]
+            #sort dataframe by column
+            this_df["line_profile"] = this_df["line_profile"].astype(int)
+            this_df = this_df.sort_values(by='line_profile')
+            labels = this_df["line_name"].values
+            this_df["labels"] = this_df.apply(lambda x: x["line_name"] + " " + str(x["line_profile"]), axis=1)
+            for column in columns_to_plot:
+                if None not in this_df['error_' + column].values:
+                    p = ax.errorbar(this_df[column].values, list(range(len(this_df[column]))), xerr=this_df['error_' + column].values,
+                            fmt='o', label=column, capsize=2)
+                else:
+                    p = ax.errorbar(this_df[column].values, list(range(len(this_df[column]))), fmt='o', label=column)
+                color = p[0].get_color()
+                ax.axvline(np.median(this_df[column]), color=color, linestyle='-')
+                ax.axvspan(np.median(this_df[column]) - np.std(this_df[column])/2.,
+                                np.median(this_df[column]) + np.std(this_df[column])/2.,
+                                color=color, alpha=0.2)
 
-            p = ax.plot(this_df[variable + '_gaussian_without_constraints'],
-                        this_df[variable + '_lorentzian_without_constraints'],
-                        'o',
-                        label=date + " (no constraints)")
-            color = p[0].get_color()
-            ax.plot(this_df[variable + '_gaussian_with_constraints'],
-                    this_df[variable + '_lorentzian_with_constraints'],
-                    'x',
-                    color=color,
-                    label=date + " (with constraints)")
-        mins = self.df[columns_to_plot].min()
-        maxes = self.df[columns_to_plot].max()
+            ax.set_yticks(list(range(len(this_df[column]))))
+            ax.set_yticklabels(this_df["labels"])
+        handles, labels = axes[-1].get_legend_handles_labels()
+        if variable == 'cen':
+            axes[-1].set_xlabel('Velocity (km/s)')
+            filename = "compare_results_velocity.png"
+        else:
+            axes[-1].set_xlabel(variable)
+            filename = "compare_results_{variable}.png"
 
-        ax.plot(np.linspace(np.min(mins), np.max(maxes), 1000),
-                np.linspace(np.min(mins), np.max(maxes), 1000),
-                '--',
-                label="1:1")
-        ax.set_xlabel(variable + ' gaussian')
-        ax.set_ylabel(variable + ' lorentzian')
-        ax.legend()
+        fig.legend(handles, labels, ncol=2, loc='lower center')
 
-        fig.savefig(filename)
+        this_filename = os.path.join(self.output_folder, filename)
+        fig.savefig(this_filename)
+        print(this_filename, "saved.")
+        plt.close(fig)
 
-    def plot_fits_and_residuals(self, color_dict={0: "red", 1: "blue", 2: "green", 3: "orange", 4: "purple", 5: "black"}):
+    def plot_fits_and_residuals(self,
+                                color_dict={0: "red", 1: "blue", 2: "green", 3: "orange", 4: "purple", 5: "black"}):
         fig, ax_dict = self.list_of_fitters[0].get_fig_and_ax_dict()
 
         for idx, this_fitter in enumerate(self.list_of_fitters):
@@ -1269,26 +1370,27 @@ class RVFitter_comparison(object):
                 this_fitter.plot_data_and_residuals(fig=fig, ax_dict=ax_dict)
             this_fitter.plot_fit_and_residuals(fig=fig,
                                                ax_dict=ax_dict,
-                                               add_legend_label=True,
+                                               add_legend_label=False,
                                                plot_dict={"zorder": 2.5,
                                                           "markersize": "1",
                                                           "color": color_dict[idx],
                                                           },
                                                plot_dict_res={
-                                                              "marker": ".",
-                                                              "linestyle": "None",
-                                                              "color": color_dict[idx],
-                                                              "markersize": "2"})
+                                                   "marker": ".",
+                                                   "linestyle": "None",
+                                                   "color": color_dict[idx],
+                                                   "markersize": "2"})
         handles, labels = ax_dict[list(ax_dict.items())[0][0]].get_legend_handles_labels()
         labels = [this_fitter.label for this_fitter in self.list_of_fitters]
         fig.legend(handles, labels, ncol=2, loc='lower center')
 
-    def plot_fits_and_data(self, color_dict = {0: "red", 1: "blue", 2: "green", 3: "orange"}, filename=None):
+    def plot_fits_and_data(self, color_dict={0: "red", 1: "blue", 2: "green", 3: "orange"}, filename=None):
         fig, axes = self.list_of_fitters[0].get_fig_and_axes()
         for idx, this_fitter in enumerate(self.list_of_fitters):
             if idx == 0:
                 this_fitter.plot_data(fig=fig, axes=axes)
-            this_fitter.plot_fit(fig=fig, axes=axes, plot_dict={"zorder": 2.5, "color": color_dict[idx], "label": this_fitter.label})
+            this_fitter.plot_fit(fig=fig, axes=axes,
+                                 plot_dict={"zorder": 2.5, "color": color_dict[idx], "label": this_fitter.label})
         handles, labels = axes[-1, -1].get_legend_handles_labels()
         fig.legend(handles, labels, ncol=2, loc='lower center')
         if filename is not None:
