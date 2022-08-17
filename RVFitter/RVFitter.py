@@ -1155,8 +1155,14 @@ class Star(object):
 
 class RVFitter_comparison(object):
     """Docstring for RVFitter_comparison. """
-    def __init__(self, list_of_fitters):
+    def __init__(self, list_of_fitters, output_folder):
         self.list_of_fitters = list_of_fitters
+        stars = [fitter.star for fitter in list_of_fitters]
+        # check if all elements of stars are equal
+        if len(set(stars)) != 1:
+            raise ValueError("All stars must be equal")
+        self.star = stars[0]
+        self.output_folder = output_folder
 
     def create_overview_df(self):
         df = pd.DataFrame()
