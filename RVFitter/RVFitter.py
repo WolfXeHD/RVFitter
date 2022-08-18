@@ -296,6 +296,22 @@ class RVFitter(object):
     def __repr__(self):
         return 'RVFitter(stars={stars})'.format(stars=self.stars)
 
+    @property
+    def subscript(self):
+        to_return = ""
+        if self.shape_profile == "gaussian":
+            to_return += "G"
+        elif self.shape_profile == "lorentzian":
+            to_return += "L"
+        elif self.shape_profile == "voigt":
+            to_return += "V"
+
+        if self.constraints_applied:
+            to_return += "wc"
+        else:
+            to_return += "nc"
+        return to_return
+
     def create_df(self, make=True):
         l_dfs = []
         for star in self.stars:
@@ -1202,6 +1218,8 @@ class RVFitter_comparison(object):
             l_error_sig.append(fitter.result.params[sig].stderr)
 
         this_df = pd.DataFrame({
+            "starname":
+                fitter.df["starname"],
             "date" + suffix:
                 fitter.df["date"],
             "line_profile" + suffix:
@@ -1222,6 +1240,8 @@ class RVFitter_comparison(object):
                 fitter.df["line_name"]
         })
 
+        df = pd.concat([df, this_df], axis=1)
+
         for col in df.columns:
             if "date" in col:
                 check = df[col] == this_df["date" + suffix]
@@ -1238,74 +1258,97 @@ class RVFitter_comparison(object):
                 if np.sum(check) != len(check):
                     raise Exception("Error: line_name mismatch")
                 df["line_name"] = df[col]
-        df = pd.concat([df, this_df], axis=1)
+
         return df
 
-    def write_overview_table(self, variable):
+    def get_df_for_latex(self, variable, add_starname=False):
         if variable not in ["amp", "cen", "sig"]:
             raise Exception("Error: variable not in ['amp', 'cen', 'sig']")
 
         columns_constraints = [col for col in self.df.columns if (variable in col)
-                                  and ("with_constraints" in col)]
+                               and ("with_constraints" in col)]
         columns_no_constraints = [col for col in self.df.columns if (variable in col)
-                                             and ("without_constraints" in col) and ("error" not in col)]
+                                  and ("without_constraints" in col) and ("error" not in col)]
         errors_no_constraints = [col for col in self.df.columns if (variable in col)
-                                             and ("without_constraints" in col) and ("error" in col)]
+                                 and ("without_constraints" in col) and ("error" in col)]
         dates = self.df["date"].unique()
 
-        df = pd.DataFrame()
+        df_for_comparison = pd.DataFrame()
         new_df = {}
         for date in dates:
             new_df['date'] = date
             temp_df = self.df[self.df["date"] == date]
+            if add_starname:
+                new_df["starname"] = self.star
             for col, ecol in zip(columns_no_constraints, errors_no_constraints):
                 new_df[col] = temp_df[col].median()
                 new_df[ecol] = temp_df[ecol].std()
             for col in columns_constraints:
                 new_df[col] = temp_df[col].median()
-            df = df.append(new_df, ignore_index=True)
 
-        l_names = ["date"]
-        for shape_profile in ["gaussian", "lorentzian"]:
-            for constraint in [True, False]:
-                subscript = self.get_subscript(shape_profile, constraint)
-                name = "$v_{" + subscript + "}$ (km/s)"
-                l_names.append(name)
-                df[name] = df.apply(lambda x: self.adjust_table(x, shape_profile=shape_profile, constraint=constraint,
-                                                                                    apply_cutoff=False), axis=1)
-        table_data = df[l_names].to_latex(escape=False, index=False, column_format="c" * len(l_names))
-        table_name = os.path.join(self.output_folder, "results_" + self.star + "_" + variable + ".tex")
-        with open(table_name, "w") as f:
-            f.write(table_data)
-        print(table_name, "written.")
-
-    @staticmethod
-    def get_subscript(shape_profile, constraint):
-        to_return = ""
-        if shape_profile == "gaussian":
-            to_return += "G"
-        elif shape_profile == "lorentzian":
-            to_return += "L"
-        elif shape_profile == "voigt":
-            to_return += "V"
-
-        if constraint:
-            to_return += "wc"
+            df_for_comparison = df_for_comparison.append(new_df, ignore_index=True)
+        if add_starname:
+            l_names = ["starname", "date"]
         else:
-            to_return += "nc"
-        return to_return
+            l_names = ["date"]
 
+        for shape_profile in ["gaussian", "lorentzian", "voigt"]:
+            for constraints_applied in [True, False]:
+                this_fitter = self.get_fitter(shape_profile=shape_profile, constraints_applied=constraints_applied)
+                if this_fitter is None:
+                    continue
+                else:
+                    subscript = this_fitter.subscript
+                    name = "$v_{" + subscript + "}$ (km/s)"
+                    l_names.append(name)
+                    df_for_comparison[name] = df_for_comparison.apply(lambda x: RVFitter_comparison.adjust_table(x, variable=variable,
+                                                                                                                 shape_profile=shape_profile,
+                                                                                                                 constraint=constraints_applied,
+                                                                                                                 apply_cutoff=False), axis=1)
+        return df_for_comparison[l_names]
+
+    def get_fitter(self, shape_profile, constraints_applied):
+        for this_fitter in self.list_of_fitters:
+            if (this_fitter.shape_profile == shape_profile) and (this_fitter.constraints_applied == constraints_applied):
+                return this_fitter
+        else:
+            None
+
+    def write_overview_table(self, variable, table_name=None):
+        if table_name is None:
+            table_name = os.path.join(self.output_folder, "results_" + self.star + "_" + variable + ".tex")
+        else:
+            table_name = table_name
+        this_df = self.get_df_for_latex(variable=variable)
+        RVFitter_comparison.write_df_to_table(input_df=this_df,
+                                              filename=table_name)
 
     @staticmethod
-    def adjust_table(x, shape_profile, constraint, apply_cutoff=False):
+    def write_df_to_table(input_df, filename):
+        table_data = input_df.to_latex(escape=False, index=False, column_format="c" * len(input_df.columns))
+        with open(filename, "w") as f:
+            f.write(table_data)
+        print(filename, "written.")
+
+    @staticmethod
+    def adjust_table(x, variable, shape_profile, constraint, apply_cutoff=False):
         if constraint:
             constraint_string = "with"
         else:
             constraint_string = "without"
+
+        error_var = f"error_{variable}_{shape_profile}_{constraint_string}_constraints"
+        value_var = f"{variable}_{shape_profile}_{constraint_string}_constraints"
+
+        if np.isnan(x[value_var]):
+            return "$ NaN $"
+        if np.isnan(x[error_var]):
+            return "$ {value:.0f} \pm NaN $".format(value=sigfig.round(x[value_var]), decimals=1)
+
         if apply_cutoff:
-            val = sigfig.round(x[f"cen_{shape_profile}_{constraint_string}_constraints"], x[f"error_cen_{shape_profile}_{constraint_string}_constraints"], cutoff=1000, separation=' \pm ')
+            val = sigfig.round(x[value_var], x[error_var], cutoff=1000, separation=' \pm ')
         else:
-            val = sigfig.round(x[f"cen_{shape_profile}_{constraint_string}_constraints"], x[f"error_cen_{shape_profile}_{constraint_string}_constraints"], separation=' \pm ')
+            val = sigfig.round(x[value_var], x[error_var], separation=' \pm ')
         return "$" + val + "$"
 
 
