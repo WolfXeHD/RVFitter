@@ -1409,7 +1409,12 @@ class RVFitter_comparison(object):
         plt.close(fig)
 
     def plot_fits_and_residuals(self,
-                                color_dict={0: "red", 1: "blue", 2: "green", 3: "orange", 4: "purple", 5: "black"}):
+                                color_dict={0: "red", 1: "blue", 2: "green", 3: "orange", 4: "purple", 5: "black"},
+                                figname=None):
+        if figname is None:
+            figname = os.path.join(self.output_folder, "fits_and_residuals.png")
+        else:
+            figname = figname
         fig, ax_dict = self.list_of_fitters[0].get_fig_and_ax_dict()
 
         for idx, this_fitter in enumerate(self.list_of_fitters):
@@ -1432,10 +1437,8 @@ class RVFitter_comparison(object):
         labels = [this_fitter.label for this_fitter in self.list_of_fitters]
         fig.legend(handles, labels, ncol=2, loc='lower center')
 
-        filename = "fits_and_residuals.png"
-        this_filename = os.path.join(self.output_folder, filename)
-        fig.savefig(this_filename)
-        print(this_filename, "saved.")
+        fig.savefig(figname)
+        print(figname, "saved.")
         # plt.close(fig)
 
     def plot_fits_and_data(self, color_dict={0: "red", 1: "blue", 2: "green", 3: "orange"}, filename=None):
