@@ -128,7 +128,8 @@ class Line(object):
                    type,
                    ax=None,
                    plot_dict={"color": "r"},
-                   add_legend=False
+                   add_legend_param=False,
+                   add_legend_model=False,
                    ):
         this_df = df.query('line_hash == @self.hash')
         row = this_df.T.squeeze()
@@ -143,14 +144,16 @@ class Line(object):
             1000)
 
         model = model_func(params=result.params, row=this_row, type=type)
-        if add_legend:
+        if add_legend_param:
             value = int(result.params[this_row["parameters"]["cen"]].value)
             label = "{0} km/s".format(value)
             plot_dict.update({"label": label})
+        elif add_legend_model:
+            plot_dict.update({"label": model_func})
 
         ax.plot(this_row["clipped_wlc_to_velocity"], model, **plot_dict)
 
-        if add_legend:
+        if add_legend_param:
             ax.legend()
 
     def plot_residuals(self,
@@ -485,6 +488,7 @@ class RVFitter(object):
                                fig,
                                ax_dict,
                                add_legend_label=False,
+                               add_legend_model=False,
                                plot_dict={
                                    "zorder": 2.5,
                                    "color": "red"
@@ -506,7 +510,8 @@ class RVFitter(object):
                                 type=self.shape_profile,
                                 result=self.result,
                                 ax=this_ax,
-                                add_legend=add_legend_label,
+                                add_legend_param=add_legend_label,
+                                add_legend_model=add_legend_model,
                                 plot_dict=plot_dict)
                 line.plot_residuals(df=star.df,
                                     model_func=self.model,
@@ -516,7 +521,6 @@ class RVFitter(object):
                                     plot_dict=plot_dict_res)
 
                 this_ax_res.axhline(0, linestyle="--", color="black")
-                # this_ax_res.set_ylim(-0.5, 0.5)
 
     def plot_data_and_residuals(self,
                                 fig,
@@ -1414,6 +1418,7 @@ class RVFitter_comparison(object):
             this_fitter.plot_fit_and_residuals(fig=fig,
                                                ax_dict=ax_dict,
                                                add_legend_label=False,
+                                               add_legend_model=True,
                                                plot_dict={"zorder": 2.5,
                                                           "markersize": "1",
                                                           "color": color_dict[idx],
@@ -1426,6 +1431,12 @@ class RVFitter_comparison(object):
         handles, labels = ax_dict[list(ax_dict.items())[0][0]].get_legend_handles_labels()
         labels = [this_fitter.label for this_fitter in self.list_of_fitters]
         fig.legend(handles, labels, ncol=2, loc='lower center')
+
+        filename = "fits_and_residuals.png"
+        this_filename = os.path.join(self.output_folder, filename)
+        fig.savefig(this_filename)
+        print(this_filename, "saved.")
+        # plt.close(fig)
 
     def plot_fits_and_data(self, color_dict={0: "red", 1: "blue", 2: "green", 3: "orange"}, filename=None):
         fig, axes = self.list_of_fitters[0].get_fig_and_axes()
