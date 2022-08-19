@@ -1365,12 +1365,16 @@ class RVFitter_comparison(object):
         dates = self.df["date"].unique()
 
         if fig_and_ax is None:
-            fig, axes = plt.subplots(len(dates), 1, sharex=True)
+            if len(dates) > 1:
+                fig, axes = plt.subplots(len(dates), 1, sharex=True)
+            else:
+                fig, axes = plt.subplots(1, 1)
+                axes = np.array([axes])
         else:
             fig, axes = fig_and_ax
         fig.suptitle('Comparison of fit results for ' + self.star)
         plt.subplots_adjust(hspace=0.3, bottom=0.25, left=0.15)
-        #  print(columns_to_plot)
+
         for i, (ax, date) in enumerate(zip(axes, dates)):
             ax.set_title(date, fontsize=10)
             this_df = self.df[self.df["date"] == date]
@@ -1452,3 +1456,4 @@ class RVFitter_comparison(object):
         fig.legend(handles, labels, ncol=2, loc='lower center')
         if filename is not None:
             fig.savefig(filename)
+
