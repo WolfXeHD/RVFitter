@@ -7,3 +7,6 @@
 .eggs
 .DS_Store
 build/*
+*tar.gz
+*.whl
+.vscode/*
