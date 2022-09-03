@@ -1,269 +1,21 @@
-import numpy as np
-from datetime import datetime
-import matplotlib.pyplot as plt
-from scipy.interpolate import splrep, splev
-import lmfit
-import hashlib
-import pandas as pd
-import astropy.units as u
-import astropy.constants as const
-import numpy as np
-import pickle
 import copy
 import os
-import sigfig
-import ipdb
+import pickle
+
+import lmfit
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from RVFitter.Line import Line
+from RVFitter.Star import Star
 
 # TODO: add a unique identifier for a line which can be used as key for parameters
 
 
-class Line(object):
-    def __init__(self, line_name, line_profile, wlc_window):
-        self.line_name = line_name
-        self.line_profile = line_profile
-        self.wlc_window = wlc_window
-
-        hash_object = hashlib.md5(self.line_name.encode() +
-                                  str(np.random.rand(1)).encode())
-        self.hash = hash_object.hexdigest()[:10]
-        self._clear()
-
-        self.is_selected = True
-
-    def _clear(self):
-        self.normed_wlc = None
-        self.normed_flux = None
-        self.normed_errors = None
-        self.leftValueNorm = None
-        self.rightValueNorm = None
-        self.leftClip = []
-        self.rightClip = []
-        self.clipped_wlc = None
-        self.clipped_flux = None
-        self.clipped_error = None
-        self.got_normed = False
-        self.is_clipped = False
-
-    def __repr__(self):
-        return "Line(\"{name}\", {profile}, {wlc_window})".format(
-            name=self.line_name,
-            profile=self.line_profile,
-            wlc_window=self.wlc_window)
-
-    @property
-    def normed_wlc_to_velocity(self):
-        if self.normed_wlc is None:
-            return None
-        else:
-            return self.wave_to_vel(self.normed_wlc, self.line_profile)
-
-    @property
-    def clipped_error_to_velocity(self):
-        if self.clipped_error is None:
-            return None
-        else:
-            return self.wave_to_vel(self.clipped_error, self.line_profile)
-
-    @property
-    def clipped_wlc_to_velocity(self):
-        if self.clipped_wlc is None:
-            return None
-        else:
-            return self.wave_to_vel(self.clipped_wlc, self.line_profile)
-
-    def wave_to_vel(self, wavelength, w0):
-        vel = (const.c.to(u.km / u.s).value * ((wavelength - w0) / w0))
-        return vel
-
-    def add_normed_spectrum(self, angstrom, flux, error, leftValueNorm,
-                            rightValueNorm):
-        self.got_normed = True
-        self.spline = splrep([min(angstrom), max(angstrom)],
-                             [leftValueNorm, rightValueNorm],
-                             k=1)
-        self.continuum = splev(angstrom, self.spline)
-        self.normed_wlc = angstrom
-        self.normed_flux = flux / self.continuum
-        if np.isnan(np.sum(self.normed_flux)):
-            __import__('ipdb').set_trace()
-        self.normed_errors = error
-        self.leftValueNorm = leftValueNorm
-        self.rightValueNorm = rightValueNorm
-
-        self.clipped_wlc = self.normed_wlc
-        self.clipped_flux = self.normed_flux
-
-        masker = (self.clipped_wlc < (self.line_profile + self.wlc_window)) & (
-                self.clipped_wlc > (self.line_profile - self.wlc_window))
-        # get indices from array of wavelengths
-
-        self.clipped_wlc = self.clipped_wlc[masker]
-        self.clipped_flux = self.clipped_flux[masker]
-
-    def clip_spectrum(self, leftClip, rightClip):
-        if not self.got_normed:
-            print("You cannot clip before you normalize!")
-            raise SystemExit
-        else:
-            if leftClip > rightClip:
-                leftClip, rightClip = rightClip, leftClip
-
-            self.leftClip.append(leftClip)
-            self.rightClip.append(rightClip)
-
-            masking = (self.clipped_wlc > leftClip) & (self.clipped_wlc <
-                                                       rightClip)
-            self.clipped_wlc = self.clipped_wlc[~masking]
-            self.clipped_flux = self.clipped_flux[~masking]
-            self.is_clipped = True
-
-    def plot_clips(self, ax):
-        for left, right in zip(self.leftClip, self.rightClip):
-            ax.axvspan(left, right, color='blue', alpha=0.2)
-
-    def plot_model(self,
-                   df,
-                   model_func,
-                   result,
-                   type,
-                   ax=None,
-                   plot_dict={"color": "r"},
-                   add_legend_param=False,
-                   add_legend_model=False,
-                   ):
-        this_df = df.query('line_hash == @self.hash')
-        row = this_df.T.squeeze()
-        if ax is None:
-            fig, ax = plt.subplots()
-        else:
-            ax = ax
-
-        this_row = copy.deepcopy(row)
-        this_row["clipped_wlc_to_velocity"] = np.linspace(
-            self.clipped_wlc_to_velocity[0], self.clipped_wlc_to_velocity[-1],
-            1000)
-
-        model = model_func(params=result.params, row=this_row, type=type)
-        if add_legend_param:
-            value = int(result.params[this_row["parameters"]["cen"]].value)
-            label = "{0} km/s".format(value)
-            plot_dict.update({"label": label})
-        elif add_legend_model:
-            plot_dict.update({"label": model_func})
-
-        ax.plot(this_row["clipped_wlc_to_velocity"], model, **plot_dict)
-
-        if add_legend_param:
-            ax.legend()
-
-    def plot_residuals(self,
-                       df,
-                       model_func,
-                       result,
-                       type,
-                       ax=None,
-                       plot_dict={
-                           "color": "r",
-                           "marker": "."
-                       }):
-        this_df = df.query('line_hash == @self.hash')
-        row = this_df.T.squeeze()
-        if ax is None:
-            fig, ax = plt.subplots()
-        else:
-            ax = ax
-
-        this_row = copy.deepcopy(row)
-
-        model = model_func(params=result.params, row=this_row, type=type)
-
-        residuals = (this_row["clipped_flux"] -
-                     model) / this_row["clipped_error"]
-
-        ax.plot(this_row["clipped_wlc_to_velocity"], residuals, **plot_dict)
-        ax.set_ylim(np.abs(max(residuals)) * (-1), np.abs(max(residuals)))
-
-    def plot_clipped_spectrum(self,
-                              ax=None,
-                              title_prefix=None,
-                              plot_velocity=False,
-                              plot_dict={
-                                  "fmt": 'ro',
-                                  "color": 'black',
-                                  "ecolor": 'black'
-                              }):
-
-        if not self.is_clipped:
-            print("Clipped spectrum not found!")
-            raise SystemExit
-        indices = np.logical_and(
-            self.clipped_wlc > self.line_profile - self.wlc_window,
-            self.clipped_wlc < self.line_profile + self.wlc_window)
-        if ax is None:
-            fig, ax = plt.subplots()
-        else:
-            ax = ax
-
-        if self.clipped_error is None:
-            print("No errors for normed flux - assuming 1%")
-            self.clipped_error = 0.01 * self.clipped_flux
-        if plot_velocity:
-            xdata = self.clipped_wlc_to_velocity
-        else:
-            xdata = self.clipped_wlc
-        ax.errorbar(xdata[indices],
-                    self.clipped_flux[indices],
-                    yerr=self.clipped_error[indices],
-                    **plot_dict)
-        ax.axhline(y=1, linestyle='-.', color='black')
-        if plot_velocity:
-            ax.set_xlabel("Velocity (km/s)")
-        else:
-            ax.set_xlabel(r'Wavelength ($\AA$)')
-        ax.set_ylabel('normalized flux')
-        title = self.line_name + ' ' + str(
-            "%.0f" % self.line_profile) + ' (clipped)'
-        if title_prefix == None:
-            ax.set_title(title)
-        elif title_prefix == 'no_title':
-            pass
-        else:
-            ax.set_title(title_prefix + title)
-
-    def plot_normed_spectrum(self, ax=None, title_prefix=None):
-        if not self.got_normed:
-            print("You cannot plot a normed spectrum before adding it!")
-            raise SystemExit
-        indices = np.logical_and(
-            self.normed_wlc > self.line_profile - self.wlc_window,
-            self.normed_wlc < self.line_profile + self.wlc_window)
-        if ax is None:
-            fig, ax = plt.subplots()
-        else:
-            ax = ax
-
-        if self.normed_errors is None:
-            print("No errors for normed flux - assuming 1%")
-            self.normed_errors = 0.01 * self.normed_flux
-        ax.errorbar(self.normed_wlc[indices],
-                    self.normed_flux[indices],
-                    yerr=self.normed_errors[indices],
-                    fmt='ro',
-                    color='black',
-                    ecolor='black')
-        ax.axhline(y=1, linestyle='-.', color='black')
-        ax.set_xlabel(r'wavelength ($\AA$)')
-        ax.set_ylabel('flux')
-        title = self.line_name + ' ' + str(
-            "%.0f" % self.line_profile) + ' (normalized)'
-        if title_prefix == None:
-            ax.set_title(title)
-        else:
-            ax.set_title(title_prefix + title)
-
-
 class RVFitter(object):
     """Docstring for RVFitter. """
+
     def __init__(self, stars, df_name=None, debug=False):
         self.stars = stars
         self.debug = debug
@@ -292,6 +44,7 @@ class RVFitter(object):
             self.df = None
         else:
             self.df = pd.read_pickle(self.df_name)
+        self.result = None
 
     def __str__(self):
         return 'RVFitter(stars={stars})'.format(stars=self.stars[0].starname)
@@ -447,10 +200,10 @@ class RVFitter(object):
 
     def get_fig_and_ax_dict(self):
         dates_list = []
-        for i, star in enumerate(self.stars):
+        for star in self.stars:
             line_ids = []
             res_ids = []
-            for j, line in enumerate(star.lines):
+            for line in star.lines:
                 line_ids.append(('{}_{}').format(star.date, line.line_profile))
                 res_ids.append(('{}_{}_res').format(star.date,
                                                     line.line_profile))
@@ -472,7 +225,9 @@ class RVFitter(object):
         )
         return fig, ax_dict
 
-    def plot_fit(self, fig, axes, plot_dict={"zorder": 2.5, "color": "red"}):
+    def plot_fit(self, axes, plot_dict=None):
+        if plot_dict is None:
+            plot_dict = {"zorder": 2.5, "color": "red"}
         for i, star in enumerate(self.stars):
             for j, line in enumerate(star.lines):
                 this_ax = axes[i, j]
@@ -485,19 +240,20 @@ class RVFitter(object):
                                 plot_dict=plot_dict)
 
     def plot_fit_and_residuals(self,
-                               fig,
                                ax_dict,
                                add_legend_label=False,
                                add_legend_model=False,
-                               plot_dict={
-                                   "zorder": 2.5,
-                                   "color": "red"
-                               },
-                               plot_dict_res={
-                                   "marker": ".",
-                                   "linestyle": 'None',
-                                   "color": "red"
-                               }):
+                               plot_dict=None,
+                               plot_dict_res=None):
+        if plot_dict is None:
+            plot_dict = {"zorder": 2.5, "color": "red"}
+        if plot_dict_res is None:
+            plot_dict_res = {
+                "marker": ".",
+                "linestyle": 'None',
+                "color": "red"
+            }
+
         for star in self.stars:
             for line in star.lines:
                 this_ax = ax_dict[('{}_{}').format(star.date,
@@ -523,13 +279,11 @@ class RVFitter(object):
                 this_ax_res.axhline(0, linestyle="--", color="black")
 
     def plot_data_and_residuals(self,
-                                fig,
                                 ax_dict,
-                                plot_dict={
-                                    "fmt": '.',
-                                    "color": "black",
-                                    "ecolor": "black"
-                                }):
+                                plot_dict=None
+                                ):
+        if plot_dict is None:
+            plot_dict = {"fmt": '.', "color": "black", "ecolor": "black"}
         for i, star in enumerate(self.stars):
             for j, line in enumerate(star.lines):
                 if i != 0:
@@ -552,13 +306,11 @@ class RVFitter(object):
                                  rotation='vertical', transform=this_ax.transAxes, fontsize=14)
 
     def plot_data(self,
-                  fig,
                   axes,
-                  plot_dict={
-                      "fmt": 'o',
-                      "color": "black",
-                      "ecolor": "black"
-                  }):
+                  plot_dict=None
+                  ):
+        if plot_dict is None:
+            plot_dict = {"fmt": '.', "color": "black", "ecolor": "black"}
         for i, star in enumerate(self.stars):
             for j, line in enumerate(star.lines):
                 this_ax = axes[i, j]
@@ -568,7 +320,7 @@ class RVFitter(object):
 
     def apply_legend(self, axes):
         for i, star in enumerate(self.stars):
-            for j, line in enumerate(star.lines):
+            for j in range(len(star.lines)):
                 this_ax = axes[i, j]
                 this_ax.legend(loc='upper right')
 
@@ -687,51 +439,50 @@ class RVFitter(object):
 
         print("Write parameters to file: {filename}".format(
             filename=output_file))
-        with open(output_file, 'w') as file:
-            for _, row in self.df.iterrows():
-                line_profile = row["line_profile"]
-                amplitude, err_amplitude = round(
-                    self.result.params[row["parameters"]["amp"]].value,
-                    4), round(
-                        self.result.params[row["parameters"]["amp"]].stderr, 4)
-                sigma, err_sigma = round(
-                    self.result.params[row["parameters"]["sig"]].value,
-                    4), round(
-                        self.result.params[row["parameters"]["sig"]].stderr, 4)
-                centroid, err_centroid = round(
-                    self.result.params[row["parameters"]["cen"]].value,
-                    4), round(
-                        self.result.params[row["parameters"]["cen"]].stderr, 4)
-                height, err_height = round(
-                    0.3183099 * amplitude / max(1.e-15, sigma),
-                    4), round(0.3183099 * err_amplitude / max(1.e-15, sigma),
-                              4)
 
-                print('-----------',
-                      row["line_name"] + ' ' + str(line_profile),
-                      '-----------')
-                print('Amplitude= ', '\t', amplitude, ' +/-\t', err_amplitude)
-                print('Sigma=     ', '\t', sigma, ' +/-\t', err_sigma)
-                print('Centroid=     ', '\t', centroid, ' +/-\t', err_centroid)
-                if self.shape_profile == "voigt":
-                    amplitudeL, err_amplitudeL = round(
-                        self.result.params[row["parameters"]["ampL"]].value,
-                        4), round(
-                            self.result.params[row["parameters"]["ampL"]].stderr, 4)
-                    sigmaL, err_sigmaL = round(
-                        self.result.params[row["parameters"]["sigL"]].value,
-                        4), round(
-                            self.result.params[row["parameters"]["sigL"]].stderr, 4)
-                    centroidL, err_centroidL = round(
-                        self.result.params[row["parameters"]["cenL"]].value,
-                        4), round(
-                            self.result.params[row["parameters"]["cenL"]].stderr, 4)
-                    print('AmplitudeL= ', '\t', amplitudeL, ' +/-\t',
-                          err_amplitudeL)
-                    print('SigmaL=     ', '\t', sigmaL, ' +/-\t', err_sigmaL)
-                    print('CentroidL=     ', '\t', centroidL, ' +/-\t',
-                          err_centroidL)
+        for _, row in self.df.iterrows():
+            line_profile = row["line_profile"]
+            amplitude, err_amplitude = round(
+                self.result.params[row["parameters"]["amp"]].value,
+                4), round(
+                    self.result.params[row["parameters"]["amp"]].stderr, 4)
+            sigma, err_sigma = round(
+                self.result.params[row["parameters"]["sig"]].value,
+                4), round(
+                    self.result.params[row["parameters"]["sig"]].stderr, 4)
+            centroid, err_centroid = round(
+                self.result.params[row["parameters"]["cen"]].value,
+                4), round(
+                    self.result.params[row["parameters"]["cen"]].stderr, 4)
+            # height, err_height = round(
+            #     0.3183099 * amplitude / max(1.e-15, sigma),
+            #     4), round(0.3183099 * err_amplitude / max(1.e-15, sigma),
+            #                 4)
 
+            print('-----------',
+                    row["line_name"] + ' ' + str(line_profile),
+                    '-----------')
+            print('Amplitude= ', '\t', amplitude, ' +/-\t', err_amplitude)
+            print('Sigma=     ', '\t', sigma, ' +/-\t', err_sigma)
+            print('Centroid=     ', '\t', centroid, ' +/-\t', err_centroid)
+            if self.shape_profile == "voigt":
+                amplitudeL, err_amplitudeL = round(
+                    self.result.params[row["parameters"]["ampL"]].value,
+                    4), round(
+                        self.result.params[row["parameters"]["ampL"]].stderr, 4)
+                sigmaL, err_sigmaL = round(
+                    self.result.params[row["parameters"]["sigL"]].value,
+                    4), round(
+                        self.result.params[row["parameters"]["sigL"]].stderr, 4)
+                centroidL, err_centroidL = round(
+                    self.result.params[row["parameters"]["cenL"]].value,
+                    4), round(
+                        self.result.params[row["parameters"]["cenL"]].stderr, 4)
+                print('AmplitudeL= ', '\t', amplitudeL, ' +/-\t',
+                        err_amplitudeL)
+                print('SigmaL=     ', '\t', sigmaL, ' +/-\t', err_sigmaL)
+                print('CentroidL=     ', '\t', centroidL, ' +/-\t',
+                        err_centroidL)
 
     def run_fit(self, objective=None):
         if objective is None:
@@ -812,7 +563,7 @@ class RVFitter(object):
                                       share_line_hashes=False,
                                       datetime_formatter="%Y%m%dT%H",
                                       debug=False):
-        with open(specsfilelist_name, 'r') as f:
+        with open(specsfilelist_name, 'r', encoding='utf-8') as f:
             specsfilelist = f.read().splitlines()
         if debug:
             specsfilelist = specsfilelist[:2]
@@ -871,7 +622,7 @@ class RVFitter(object):
         elif type == "lorentzian":
             return 1 - amp * (1 / (1 + ((x - cen) / sigma) ** 2))
         elif type == "voigt":
-            return 1 - (amp * (1 / (sigma * (np.sqrt(2 * np.pi)))) * (np.exp(-((x - cen) ** 2) / ((2 * sigma) ** 2))) \
+            return 1 - (amp * (1 / (sigma * (np.sqrt(2 * np.pi)))) * (np.exp(-((x - cen) ** 2) / ((2 * sigma) ** 2)))
                         + (ampL * sigmaL ** 2 / ((x - cen) ** 2 + sigmaL ** 2)))
             # raise NotImplementedError
         else:
@@ -885,575 +636,11 @@ class RVFitter(object):
         sig = params[par_names["sig"]]
         x = row["clipped_wlc_to_velocity"]
         if type != "voigt":
-            shape_func = lambda x, amp, cen, sig, type: __class__.shape(x, amp, cen, sig, type=type)
+            def shape_func(x, amp, cen, sig, type): return __class__.shape(
+                x, amp, cen, sig, type=type)
             return shape_func(x, amp, cen, sig, type=type)
         else:
             ampL = params[par_names["ampL"]]
             sigmaL = params[par_names["sigL"]]
             shape_func = __class__.shape
             return shape_func(x, amp, cen, sig, ampL=ampL, sigmaL=sigmaL, type=type)
-
-
-class Star(object):
-    """Docstring for Star. """
-    def __init__(
-        self,
-        starname,
-        date,
-        wavelength,  # nm
-        flux,
-        lines,
-        flux_errors=None,
-        datetime_formatter="%Y%m%dT%H",
-    ):
-        self.starname = starname
-        self.date = date
-        self.wavelength = wavelength
-        self.flux = flux
-        self.flux_errors = flux_errors
-        self.date_time_obj = datetime.strptime(self.date, datetime_formatter)
-        self.lines = lines
-        self.parameters = {}
-
-    def __repr__(self):
-        return "Star: {starname} on {date}".format(starname=self.starname,
-                                                   date=self.date)
-
-    def get_line_by_hash(self, hash):
-        for line in self.lines:
-            if line.hash == hash:
-                return line
-        else:
-            print("Line with name {name} is unknown.".format(name=name))
-            print("Known lines are:")
-            for line in self.lines:
-                print("\t", line.line_name)
-
-    def apply_selecting(self, standard_epoch):
-        for line, standard_line in zip(self.lines, standard_epoch.lines):
-            line.is_selected = standard_line.is_selected
-
-    @property
-    def angstrom(self):
-        return self.wavelength * 10
-
-    @classmethod
-    def _read_specsfile(cls, specsfile):
-        data = np.loadtxt(specsfile)
-        wavelength = data[:, 0]
-        flux = data[:, 1]
-        try:
-            flux_errors = data[:, 2]
-        except IndexError:
-            flux_errors = None
-        return wavelength, flux, flux_errors
-
-    @classmethod
-    def from_specsfile(cls,
-                       starname,
-                       date,
-                       specsfile,
-                       line_list,
-                       datetime_formatter="%Y%m%dT%H"):
-        """classmethod for creation of Star
-        :arg1: starname - name of the star
-        :arg2: date - date to be formatted into datetime object
-        :arg3: specsfile - path to specsfile which should be read
-
-        :returns: Star
-        """
-
-        wavelength, flux, flux_errors = cls._read_specsfile(specsfile)
-        lines = cls.make_line_objects(line_list)
-
-        return cls(starname=starname,
-                   date=date,
-                   wavelength=wavelength,
-                   flux=flux,
-                   flux_errors=flux_errors,
-                   lines=lines,
-                   datetime_formatter=datetime_formatter)
-
-    @classmethod
-    def from_specsfile_flexi(cls,
-                             specsfile,
-                             line_list,
-                             id_func,
-                             datetime_formatter="%Y%m%dT%H",
-                             debug=False):
-        """classmethod for creation of Star
-        :arg1: specsfile - path to specsfile which should be read
-        :arg2: id_func - function which processes the specsfile string and returns starname and date
-        :param debug:
-
-        :returns: Star
-        """
-        starname, date = id_func(specsfile)
-
-        wavelength, flux, flux_errors = cls._read_specsfile(specsfile)
-        lines = cls.make_line_objects(line_list)
-        if debug:
-            lines = lines[:3]
-
-        return cls(starname=starname,
-                   date=date,
-                   wavelength=wavelength,
-                   flux=flux,
-                   flux_errors=flux_errors,
-                   lines=lines,
-                   datetime_formatter=datetime_formatter)
-
-    def plot_line(self, line, clipping=False, ax=None, title_prefix=None):
-        """TODO: Docstring for plot_line.
-
-        :arg1: TODO
-        :returns: TODO
-
-        """
-        wlc_window, cl, line_name = line.wlc_window, line.line_profile, line.line_name
-        a = self.angstrom
-        f = self.flux
-        e = self.flux_errors
-        ind = np.logical_and(a > cl - wlc_window, a < cl + wlc_window)
-
-        if ax is None:
-            fig, ax = plt.subplots()
-        else:
-            ax = ax
-
-        if e is not None:
-            ax.errorbar(a[ind], f[ind], yerr=e[ind], fmt='-', color='k')
-        else:
-            ax.plot(a[ind], f[ind], 'k-')
-        ax.axhline(y=1, linestyle='-.', color='black')
-        ax.axvline(x=cl, linestyle=':', color='black')
-        ax.set_xlabel(r'wavelength ($\AA$)')
-        ax.set_ylabel('flux')
-        title = line_name + ' ' + str("%.0f" % cl)
-        if title_prefix == None:
-            ax.set_title(title)
-        else:
-            ax.set_title(title_prefix + title)
-
-    @classmethod
-    def _read_line_list(cls, linelist):
-        data = np.loadtxt(linelist, dtype=str)
-        line_names = np.array(data[:, 0])
-        line_profiles = np.array(data[:, 1]).astype(float)
-        wlc_windows = np.array(data[:, 2]).astype(float)
-
-        return line_names, line_profiles, wlc_windows
-
-    @classmethod
-    def make_line_objects(cls, linelist):
-        line_names, line_profiles, wlc_windows = cls._read_line_list(linelist)
-        lines = []
-        for name, profile, wlc in zip(line_names, line_profiles, wlc_windows):
-            this_line = Line(line_name=name,
-                             line_profile=profile,
-                             wlc_window=wlc)
-            lines.append(this_line)
-        return lines
-
-    def make_dataframe(self):
-        df = pd.DataFrame()
-        dict_for_df = dict()
-        dict_for_df["starname"] = self.starname
-        dict_for_df["date"] = self.date
-        dict_for_df["wavelength"] = [np.array(self.wavelength)]
-        dict_for_df["angstrom"] = [np.array(self.angstrom)]
-        dict_for_df["flux"] = [np.array(self.flux)]
-        dict_for_df["flux_error"] = [self.flux_errors]
-        dict_for_df["date_time_obj"] = self.date_time_obj
-        for line in self.lines:
-            if line.is_selected:
-                dict_for_df["line_name"] = line.line_name
-                dict_for_df["line_profile"] = line.line_profile
-                dict_for_df["wlc_window"] = line.wlc_window
-                dict_for_df["normed_wlc"] = [np.array(line.normed_wlc)]
-                dict_for_df["normed_flux"] = [np.array(line.normed_flux)]
-                dict_for_df["normed_errors"] = [np.array(line.normed_errors)]
-                dict_for_df["leftValueNorm"] = line.leftValueNorm
-                dict_for_df["rightValueNorm"] = line.rightValueNorm
-                dict_for_df["leftClip"] = [np.array(line.leftClip)]
-                dict_for_df["rightClip"] = [np.array(line.rightClip)]
-                dict_for_df["clipped_wlc"] = [np.array(line.clipped_wlc)]
-                dict_for_df["clipped_flux"] = [np.array(line.clipped_flux)]
-                dict_for_df["clipped_error"] = [np.array(line.clipped_error)]
-                dict_for_df["line_hash"] = line.hash
-                dict_for_df["clipped_error_to_velocity"] = [
-                    np.array(line.clipped_error_to_velocity)
-                ]
-                dict_for_df["clipped_wlc_to_velocity"] = [
-                    np.array(line.clipped_wlc_to_velocity)
-                ]
-
-                this_df = pd.DataFrame.from_dict(dict_for_df)
-                df = df.append(this_df)
-        self.df = df
-
-    def setup_parameters(self, shape_profile):
-        "Step 4. Fit gaussian by using lmfit"
-        self.params = lmfit.Parameters()
-        "Initialise variables ..."
-        l_parameter_names = []
-        for _, row in self.df.iterrows():
-            d = dict()
-            amplitude = 'amp_line_{name}_epoch_{epoch}'.format(
-                name=row["line_hash"], epoch=row["date"])
-
-            self.params.add(amplitude, value=0.5,
-                            vary=True, min=0)  # , min=0.01,max=1.0
-            d["amp"] = amplitude
-
-            cen = 'cen_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
-                                                         epoch=row["date"])
-            self.params.add(cen, value=0, vary=True)  # , min=0.01,max=1.0
-            d["cen"] = cen
-            sig = 'sig_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
-                                                         epoch=row["date"])
-            self.params.add(sig, value=50, vary=True)  # , min=0.01,max=1.0
-            d["sig"] = sig
-            rv_shift = 'rv_shift_line_{name}_epoch_{epoch}'.format(
-                name=row["line_hash"], epoch=row["date"])
-            self.params.add(
-                rv_shift,
-                value=200,
-                vary=True,
-                expr=
-                '299792.458*(cen_line_{name}_epoch_{epoch} - {profile:4.2f})/{profile:4.2f}'
-                    .format(name=row["line_hash"],
-                            epoch=row["date"],
-                            profile=row["line_profile"]
-                            ))  # , min = 0.)  # , min=0.01,max=1.0
-            d["rv_shift"] = rv_shift
-            fwhm = 'fwhm_line_{name}_epoch{epoch}'.format(
-                name=row["line_hash"], epoch=row["date"])
-            self.params.add(
-                fwhm,
-                value=2.0,
-                vary=True,
-                expr='2.3548200*sig_line_{name}_epoch_{epoch}'.format(
-                    name=row["line_hash"], epoch=row["date"]))
-            d["fwhm"] = fwhm
-
-            if shape_profile == "voigt":
-                amplitudeL = 'ampL_line_{name}_epoch_{epoch}'.format(
-                    name=row["line_hash"], epoch=row["date"])
-
-                self.params.add(amplitudeL, value=0.5,
-                                vary=True)  # , min=0.01,max=1.0
-                d["ampL"] = amplitudeL
-
-                sigL = 'sigL_line_{name}_epoch_{epoch}'.format(name=row["line_hash"],
-                                                               epoch=row["date"])
-                self.params.add(sigL, value=50, vary=True)  # , min=0.01,max=1.0
-                d["sigL"] = sigL
-                rv_shiftL = 'rv_shiftL_line_{name}_epoch_{epoch}'.format(
-                    name=row["line_hash"], epoch=row["date"])
-                self.params.add(
-                    rv_shiftL,
-                    value=200,
-                    vary=True,
-                    expr=
-                    '299792.458*(cen_line_{name}_epoch_{epoch} - {profile:4.2f})/{profile:4.2f}'
-                        .format(name=row["line_hash"],
-                                epoch=row["date"],
-                                profile=row["line_profile"]
-                                ))  # , min = 0.)  # , min=0.01,max=1.0
-                d["rv_shiftL"] = rv_shiftL
-                fwhmL = 'fwhmL_line_{name}_epoch{epoch}'.format(
-                    name=row["line_hash"], epoch=row["date"])
-                self.params.add(
-                    fwhmL,
-                    value=2.0,
-                    vary=True,
-                    expr='2.3548200*sig_line_{name}_epoch_{epoch}'.format(
-                        name=row["line_hash"], epoch=row["date"]))
-                d["fwhmL"] = fwhmL
-            l_parameter_names.append(d)
-
-        if "parameters" in self.df.columns:
-            del self.df["parameters"]
-        self.df["parameters"] = l_parameter_names
-
-
-class RVFitter_comparison(object):
-    """Docstring for RVFitter_comparison. """
-    def __init__(self, list_of_fitters, output_folder='.'):
-        self.list_of_fitters = list_of_fitters
-        stars = [fitter.star for fitter in list_of_fitters]
-        # check if all elements of stars are equal
-        if len(set(stars)) != 1:
-            raise ValueError("All stars must be equal")
-        self.star = stars[0]
-        self.output_folder = output_folder
-
-    def create_overview_df(self):
-        df = pd.DataFrame()
-        for fitter in self.list_of_fitters:
-            if fitter.constraints_applied:
-                suffix = fitter.shape_profile + "_with_constraints"
-            else:
-                suffix = fitter.shape_profile + "_without_constraints"
-            df = self.add_parameters_to_df(df=df,
-                                           fitter=fitter,
-                                           suffix="_" + suffix)
-        self.df = df
-
-    def add_parameters_to_df(self, df, fitter, suffix):
-        l_amp = []
-        l_cen = []
-        l_sig = []
-        l_error_amp = []
-        l_error_cen = []
-        l_error_sig = []
-        for parameter in fitter.df["parameters"]:
-            amp = parameter["amp"]
-            cen = parameter["cen"]
-            sig = parameter["sig"]
-
-            l_amp.append(fitter.result.params[amp].value)
-            l_cen.append(fitter.result.params[cen].value)
-            l_sig.append(fitter.result.params[sig].value)
-
-            l_error_amp.append(fitter.result.params[amp].stderr)
-            l_error_cen.append(fitter.result.params[cen].stderr)
-            l_error_sig.append(fitter.result.params[sig].stderr)
-
-        this_df = pd.DataFrame({
-            "starname":
-                fitter.df["starname"],
-            "date" + suffix:
-                fitter.df["date"],
-            "line_profile" + suffix:
-                fitter.df["line_profile"],
-            "amp" + suffix:
-                l_amp,
-            "cen" + suffix:
-                l_cen,
-            "sig" + suffix:
-                l_sig,
-            "error_amp" + suffix:
-                l_error_amp,
-            "error_cen" + suffix:
-                l_error_cen,
-            "error_sig" + suffix:
-                l_error_sig,
-            "line_name" + suffix:
-                fitter.df["line_name"]
-        })
-
-        df = pd.concat([df, this_df], axis=1)
-
-        for col in df.columns:
-            if "date" in col:
-                check = df[col] == this_df["date" + suffix]
-                if np.sum(check) != len(check):
-                    raise Exception("Error: date mismatch")
-                df["date"] = df[col]
-            if "line_profile" in col:
-                check = df[col] == this_df["line_profile" + suffix]
-                if np.sum(check) != len(check):
-                    raise Exception("Error: line_profile mismatch")
-                df["line_profile"] = df[col]
-            if "line_name" in col:
-                check = df[col] == this_df["line_name" + suffix]
-                if np.sum(check) != len(check):
-                    raise Exception("Error: line_name mismatch")
-                df["line_name"] = df[col]
-
-        return df
-
-    def get_df_for_latex(self, variable, add_starname=False):
-        if variable not in ["amp", "cen", "sig"]:
-            raise Exception("Error: variable not in ['amp', 'cen', 'sig']")
-
-        columns_constraints = [col for col in self.df.columns if (variable in col)
-                               and ("with_constraints" in col)]
-        columns_no_constraints = [col for col in self.df.columns if (variable in col)
-                                  and ("without_constraints" in col) and ("error" not in col)]
-        errors_no_constraints = [col for col in self.df.columns if (variable in col)
-                                 and ("without_constraints" in col) and ("error" in col)]
-        dates = self.df["date"].unique()
-
-        df_for_comparison = pd.DataFrame()
-        new_df = {}
-        for date in dates:
-            new_df['date'] = date
-            temp_df = self.df[self.df["date"] == date]
-            if add_starname:
-                new_df["starname"] = self.star
-            for col, ecol in zip(columns_no_constraints, errors_no_constraints):
-                new_df[col] = temp_df[col].median()
-                new_df[ecol] = temp_df[ecol].std()
-            for col in columns_constraints:
-                new_df[col] = temp_df[col].median()
-
-            df_for_comparison = df_for_comparison.append(new_df, ignore_index=True)
-        if add_starname:
-            l_names = ["starname", "date"]
-        else:
-            l_names = ["date"]
-
-        for shape_profile in ["gaussian", "lorentzian", "voigt"]:
-            for constraints_applied in [True, False]:
-                this_fitter = self.get_fitter(shape_profile=shape_profile, constraints_applied=constraints_applied)
-                if this_fitter is None:
-                    continue
-                else:
-                    subscript = this_fitter.subscript
-                    name = "$v_{" + subscript + "}$ (km/s)"
-                    l_names.append(name)
-                    df_for_comparison[name] = df_for_comparison.apply(lambda x: RVFitter_comparison.adjust_table(x, variable=variable,
-                                                                                                                 shape_profile=shape_profile,
-                                                                                                                 constraint=constraints_applied,
-                                                                                                                 apply_cutoff=False), axis=1)
-        return df_for_comparison[l_names]
-
-    def get_fitter(self, shape_profile, constraints_applied):
-        for this_fitter in self.list_of_fitters:
-            if (this_fitter.shape_profile == shape_profile) and (this_fitter.constraints_applied == constraints_applied):
-                return this_fitter
-        else:
-            None
-
-    def write_overview_table(self, variable, table_name=None):
-        if table_name is None:
-            table_name = os.path.join(self.output_folder, "results_" + self.star + "_" + variable + ".tex")
-        else:
-            table_name = table_name
-        this_df = self.get_df_for_latex(variable=variable)
-        RVFitter_comparison.write_df_to_table(input_df=this_df,
-                                              filename=table_name)
-
-    @staticmethod
-    def write_df_to_table(input_df, filename):
-        table_data = input_df.to_latex(escape=False, index=False, column_format="c" * len(input_df.columns))
-        with open(filename, "w") as f:
-            f.write(table_data)
-        print(filename, "written.")
-
-    @staticmethod
-    def adjust_table(x, variable, shape_profile, constraint, apply_cutoff=False):
-        if constraint:
-            constraint_string = "with"
-        else:
-            constraint_string = "without"
-
-        error_var = f"error_{variable}_{shape_profile}_{constraint_string}_constraints"
-        value_var = f"{variable}_{shape_profile}_{constraint_string}_constraints"
-
-        if np.isnan(x[value_var]):
-            return "$ NaN $"
-        if np.isnan(x[error_var]):
-            return "$ {value:.0f} \pm NaN $".format(value=sigfig.round(x[value_var]), decimals=1)
-
-        if apply_cutoff:
-            val = sigfig.round(x[value_var], x[error_var], cutoff=1000, separation=' \pm ')
-        else:
-            val = sigfig.round(x[value_var], x[error_var], separation=' \pm ')
-        return "$" + val + "$"
-
-
-    def compare_fit_results_1D(self, variable, fig_and_ax=None):
-        if variable not in ["amp", "cen", "sig"]:
-            raise Exception("Error: variable not in ['amp', 'cen', 'sig']")
-
-        columns_to_plot = [col for col in self.df.columns if (variable in col) and ("error" not in col)]
-
-        dates = self.df["date"].unique()
-
-        if fig_and_ax is None:
-            if len(dates) > 1:
-                fig, axes = plt.subplots(len(dates), 1, sharex=True)
-            else:
-                fig, axes = plt.subplots(1, 1)
-                axes = np.array([axes])
-        else:
-            fig, axes = fig_and_ax
-        fig.suptitle('Comparison of fit results for ' + self.star)
-        plt.subplots_adjust(hspace=0.3, bottom=0.25, left=0.15)
-
-        for i, (ax, date) in enumerate(zip(axes, dates)):
-            ax.set_title(date, fontsize=10)
-            this_df = self.df[self.df["date"] == date]
-            #sort dataframe by column
-            this_df["line_profile"] = this_df["line_profile"].astype(int)
-            this_df = this_df.sort_values(by='line_profile')
-            labels = this_df["line_name"].values
-            this_df["labels"] = this_df.apply(lambda x: x["line_name"] + " " + str(x["line_profile"]), axis=1)
-            for column in columns_to_plot:
-                if None not in this_df['error_' + column].values:
-                    p = ax.errorbar(this_df[column].values, list(range(len(this_df[column]))), xerr=this_df['error_' + column].values,
-                            fmt='o', label=column, capsize=2)
-                else:
-                    p = ax.errorbar(this_df[column].values, list(range(len(this_df[column]))), fmt='o', label=column)
-                color = p[0].get_color()
-                ax.axvline(np.median(this_df[column]), color=color, linestyle='-')
-                ax.axvspan(np.median(this_df[column]) - np.std(this_df[column])/2.,
-                                np.median(this_df[column]) + np.std(this_df[column])/2.,
-                                color=color, alpha=0.2)
-
-            ax.set_yticks(list(range(len(this_df[column]))))
-            ax.set_yticklabels(this_df["labels"])
-        handles, labels = axes[-1].get_legend_handles_labels()
-        if variable == 'cen':
-            axes[-1].set_xlabel('Velocity (km/s)')
-            filename = "compare_results_velocity.png"
-        else:
-            axes[-1].set_xlabel(variable)
-            filename = "compare_results_{variable}.png"
-
-        fig.legend(handles, labels, ncol=2, loc='lower center')
-
-        this_filename = os.path.join(self.output_folder, filename)
-        fig.savefig(this_filename)
-        print(this_filename, "saved.")
-        plt.close(fig)
-
-    def plot_fits_and_residuals(self,
-                                color_dict={0: "red", 1: "blue", 2: "green", 3: "orange", 4: "purple", 5: "black"},
-                                figname=None):
-        if figname is None:
-            figname = os.path.join(self.output_folder, "fits_and_residuals.png")
-        else:
-            figname = figname
-        fig, ax_dict = self.list_of_fitters[0].get_fig_and_ax_dict()
-
-        for idx, this_fitter in enumerate(self.list_of_fitters):
-            if idx == 0:
-                this_fitter.plot_data_and_residuals(fig=fig, ax_dict=ax_dict)
-            this_fitter.plot_fit_and_residuals(fig=fig,
-                                               ax_dict=ax_dict,
-                                               add_legend_label=False,
-                                               add_legend_model=True,
-                                               plot_dict={"zorder": 2.5,
-                                                          "markersize": "1",
-                                                          "color": color_dict[idx],
-                                                          },
-                                               plot_dict_res={
-                                                   "marker": ".",
-                                                   "linestyle": "None",
-                                                   "color": color_dict[idx],
-                                                   "markersize": "2"})
-        handles, labels = ax_dict[list(ax_dict.items())[0][0]].get_legend_handles_labels()
-        labels = [this_fitter.label for this_fitter in self.list_of_fitters]
-        fig.legend(handles, labels, ncol=2, loc='lower center')
-
-        fig.savefig(figname)
-        print(figname, "saved.")
-        # plt.close(fig)
-
-    def plot_fits_and_data(self, color_dict={0: "red", 1: "blue", 2: "green", 3: "orange"}, filename=None):
-        fig, axes = self.list_of_fitters[0].get_fig_and_axes()
-        for idx, this_fitter in enumerate(self.list_of_fitters):
-            if idx == 0:
-                this_fitter.plot_data(fig=fig, axes=axes)
-            this_fitter.plot_fit(fig=fig, axes=axes,
-                                 plot_dict={"zorder": 2.5, "color": color_dict[idx], "label": this_fitter.label})
-        handles, labels = axes[-1, -1].get_legend_handles_labels()
-        fig.legend(handles, labels, ncol=2, loc='lower center')
-        if filename is not None:
-            fig.savefig(filename)
-
