@@ -1,9 +1,6 @@
 import unittest
-import pkg_resources
 import os
 import numpy as np
-import copy
-import matplotlib.pyplot as plt
 
 from RVFitter import RVFitter
 
@@ -53,7 +50,7 @@ def model(params, row):
 
 
 def get_tmp_file(filename):
-    with open(filename, "r") as f:
+    with open(filename, "r", encoding='utf-8') as f:
         data = f.read()
 
     tmp_specsfilelist = filename.replace(".txt", "_tmp.txt")

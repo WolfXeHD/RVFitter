@@ -1,9 +1,8 @@
-import unittest
-import pkg_resources
 import os
-import matplotlib.pyplot as plt
+import unittest
 
-from RVFitter import Star
+import matplotlib.pyplot as plt
+from RVFitter.Star import Star
 
 
 def id_func(specsfile):
@@ -38,7 +37,7 @@ class TestRVObject(unittest.TestCase):
                                            id_func=id_func,
                                            line_list=line_list)
         for line in mytest.lines:
-            fig, ax = plt.subplots()
+            _, ax = plt.subplots()
             mytest.plot_line(line, ax=ax)
             figname = "DEBUG_" + line.line_name + ".png"
             if "\\" in figname:
@@ -69,7 +68,7 @@ class TestRVObject(unittest.TestCase):
                                      leftValueNorm=limit[0],
                                      rightValueNorm=limit[1])
         for line in mytest.lines:
-            fig, ax = plt.subplots()
+            _, ax = plt.subplots()
             line.plot_normed_spectrum(ax)
             figname = "DEBUG_normed_" + line.line_name + ".png"
             if "\\" in figname:
