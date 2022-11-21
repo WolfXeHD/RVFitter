@@ -43,6 +43,12 @@ class Star(object):
                 return line
         raise ValueError(f"No line with hash {hash} found.")
 
+    def get_line(self, line_name, line_profile):
+        for line in self.lines:
+            if line.line_name == line_name and line.line_profile == line_profile:
+                return line
+        raise ValueError(f"No line with name {line_name} and profile {line_profile} found.")
+
     def apply_selecting(self, standard_epoch):
         for line, standard_line in zip(self.lines, standard_epoch.lines):
             line.is_selected = standard_line.is_selected

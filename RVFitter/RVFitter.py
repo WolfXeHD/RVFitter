@@ -373,6 +373,11 @@ class RVFitter(object):
     def setup_parameters(self):
         if self.shape_profile is None:
             raise Exception("shape_profile not set")
+        elif self.shape_profile not in ['gaussian', 'lorentzian', 'voigt']:
+            raise Exception("shape_profile not recognized")
+        else:
+            print("shape_profile: {}".format(self.shape_profile))
+
         for star in self.stars:
             star.setup_parameters(shape_profile=self.shape_profile)
         self.create_df(make=False)
@@ -644,3 +649,37 @@ class RVFitter(object):
             sigmaL = params[par_names["sigL"]]
             shape_func = __class__.shape
             return shape_func(x, amp, cen, sig, ampL=ampL, sigmaL=sigmaL, type=type)
+
+    def get_results_per_line(self, line_name, line_profile):
+        if self.result is None:
+            raise ValueError("No results yet. Run fit first.")
+
+        l_dfs = []
+        for star in self.stars:
+            this_dict = {}
+            this_dict["starname"] = [star.starname]
+            this_dict["date"] = [star.date]
+            this_dict["line_name"] = [line_name]
+            this_dict["line_profile"] = [line_profile]
+
+            this_line = star.get_line(line_name, line_profile)
+            partial_df = self.df.query('line_hash == @this_line.hash')
+            POIs = partial_df["parameters"][0]
+            #  for parameter_name, result_name in POIs.items():
+            this_dict["cen"] = [self.result.params[POIs["cen"]].value]
+            this_dict["amp"] = [self.result.params[POIs["amp"]].value]
+            this_dict["sig"] = [self.result.params[POIs["sig"]].value]
+            this_df = pd.DataFrame.from_dict(this_dict)
+            l_dfs.append(this_df)
+        return pd.concat(l_dfs)
+
+    def get_results_per_linelist(self, list_of_name_and_profile_tuples):
+        for name, profile in list_of_name_and_profile_tuples:
+            print(name, profile)
+            this_df = self.get_results_per_line(name, profile)
+            if "df" not in locals():
+                df = this_df
+            else:
+                df = pd.concat([df, this_df])
+        return df
+
