@@ -1456,4 +1456,3 @@ class RVFitter_comparison(object):
         fig.legend(handles, labels, ncol=2, loc='lower center')
         if filename is not None:
             fig.savefig(filename)
-
