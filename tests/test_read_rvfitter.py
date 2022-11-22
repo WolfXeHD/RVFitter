@@ -1,8 +1,6 @@
 import unittest
-import pkg_resources
 import os
 import numpy as np
-import copy
 import matplotlib.pyplot as plt
 
 from RVFitter import RVFitter
@@ -53,7 +51,7 @@ def model(params, row):
 
 
 def get_tmp_file(filename):
-    with open(filename, "r") as f:
+    with open(filename, "r", encoding='utf-8') as f:
         data = f.read()
 
     tmp_specsfilelist = filename.replace(".txt", "_tmp.txt")
@@ -100,7 +98,7 @@ class TestRVFitter(unittest.TestCase):
         self.myfitter.setup_parameters()
         self.myfitter.run_fit()
         self.myfitter.print_fit_result()
-
+#
     def test_single_star_fitting(self):
         filename = os.path.join(os.path.dirname(self.specsfilelist),
                                 "B275_speclist.pkl")
@@ -212,6 +210,37 @@ class TestRVFitter(unittest.TestCase):
                 self.assertEqual(line.clipped_error.any(),
                                  row['clipped_error'].any())
                 self.assertEqual(line.hash, row['line_hash'])
+#
+    def test_line_getting(self):
+        filename = os.path.join(os.path.dirname(self.specsfilelist),
+                                "B275_speclist.pkl")
+        myfitter = RVFitter.load_from_df_file(filename=filename)
+
+        myfitter.shape_profile = "asdfasdf"
+        self.assertRaises(Exception, myfitter.setup_parameters)
+
+        myfitter.shape_profile = "lorentzian"
+        myfitter.setup_parameters()
+        myfitter.run_fit()
+
+        result_df = myfitter.get_results_per_line("Ba-10", 3797.909)
+
+        result_df = myfitter.get_results_per_linelist([
+            ("Ba-10", 3797.909),
+            ("Ba-10", 3797.909)
+            ])
+
+        print(result_df)
+
+        for star in myfitter.stars:
+            self.assertRaises(ValueError, star.get_line, "HeI", 3797.909)
+            this_line = star.get_line("Ba-10", 3797.909)
+            partial_df = myfitter.df.query('line_hash == @this_line.hash')
+            POIs = partial_df["parameters"][0]
+
+            self.assertEqual(len(partial_df), 1)
+            self.assertEqual(partial_df["line_name"].values[0], "Ba-10")
+            self.assertEqual(partial_df["line_profile"].values[0], 3797.909)
 
 
 if __name__ == "__main__":

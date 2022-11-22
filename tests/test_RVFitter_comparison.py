@@ -1,14 +1,8 @@
+import os
 import unittest
 
-import numpy as np
-
-from RVFitter import RVFitter, RVFitter_comparison
-import pkg_resources
-import os
-import copy
-import sys
-import matplotlib.pyplot as plt
-import pandas as pd
+from RVFitter.RVFitter import RVFitter
+from RVFitter.RVFitter_comparison import RVFitter_comparison
 
 
 def get_tmp_file(filename):
