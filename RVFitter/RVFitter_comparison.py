@@ -254,7 +254,7 @@ class RVFitter_comparison(object):
 
         if color_dict is None:
             color_dict={0: "red", 1: "blue", 2: "green",
-                        3: "orange", 4: "purple", 5: "black"},
+                        3: "orange", 4: "purple", 5: "black"}
         if figname is None:
             figname = os.path.join(
                 self.output_folder, "fits_and_residuals.png")
@@ -262,9 +262,8 @@ class RVFitter_comparison(object):
 
         for idx, this_fitter in enumerate(self.list_of_fitters):
             if idx == 0:
-                this_fitter.plot_data_and_residuals(fig=fig, ax_dict=ax_dict)
-            this_fitter.plot_fit_and_residuals(fig=fig,
-                                               ax_dict=ax_dict,
+                this_fitter.plot_data_and_residuals(ax_dict=ax_dict)
+            this_fitter.plot_fit_and_residuals(ax_dict=ax_dict,
                                                add_legend_label=False,
                                                add_legend_model=True,
                                                plot_dict={"zorder": 2.5,

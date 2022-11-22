@@ -841,7 +841,7 @@ class RVFitter(object):
 
         for idx, this_fitter in enumerate(self.list_of_fitters):
             if idx == 0:
-                this_fitter.plot_data_and_residuals(fig=fig, ax_dict=ax_dict)
+                this_fitter.plot_data_and_residuals(ax_dict=ax_dict)
             this_fitter.plot_fit_and_residuals(fig=fig,
                                                ax_dict=ax_dict,
                                                add_legend_label=False,
