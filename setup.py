@@ -14,7 +14,7 @@ with open('requirements.txt') as f:
 
 setuptools.setup(
     name="RVFitter",
-    version="0.0.1",
+    version="0.0.2",
     author="Tim Michel Heinz Wolf",
     description="Organiation of files for RV finding and fitting",
     #  long_description=long_description + '\n\n' + history,
