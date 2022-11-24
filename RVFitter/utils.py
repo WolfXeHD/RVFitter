@@ -31,14 +31,18 @@ def manipulate_df_by_line_list(df, line_list):
             full_masker = masker1 & masker2
             this_df = df[full_masker]
             if len(this_df) == 0:
-                df_name = df.query(
-                    f"(line_name == \"{line['line_name']}\")"
-                )
+                df_name = df[masker1]
 
                 if len(df_name) == 0:
                     available_lines = df["line_name"].unique()
-                    raise Exception(
-                        f"Line {line['line_name']} not found in dataframe. Available lines are: {available_lines}")
+                    message = f"Line {line['line_name']} not found in dataframe. Available lines are: "
+                    message += "["
+                    for avail in available_lines:
+                        message += f"{avail}, "
+                    message = message[:-2]
+                    message += "]"
+
+                    raise Exception(message)
                 else:
                     available_line_profiles = df_name["line_profile"].unique()
                     raise Exception("No data for line {} with profile {}. Available profiles are {}".format(
