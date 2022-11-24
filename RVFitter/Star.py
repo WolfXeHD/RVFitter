@@ -56,7 +56,7 @@ class Star(object):
             for line2 in self.lines[idx + 1 :]:
                 if line.line_name == line2.line_name and line.line_profile == line2.line_profile:
                     raise ValueError(
-                        f"Line {line.line_name} with profile {line.line_profile} is not unique in star {self.starname}"
+                        f"Line {line.line_name} at {line.line_profile} is not unique in {self.starname}. Make sure that your line list contains each line only once."
                     )
 
 
