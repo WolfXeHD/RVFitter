@@ -33,6 +33,8 @@ class Star(object):
         self.df = None
         self.params = None
 
+        self._check_line_uniqueness()
+
     def __repr__(self):
         return "Star: {starname} on {date}".format(starname=self.starname,
                                                    date=self.date)
@@ -48,6 +50,15 @@ class Star(object):
             if line.line_name == line_name and line.line_profile == line_profile:
                 return line
         raise ValueError(f"No line with name {line_name} and profile {line_profile} found.")
+
+    def _check_line_uniqueness(self):
+        for idx, line in enumerate(self.lines):
+            for line2 in self.lines[idx + 1 :]:
+                if line.line_name == line2.line_name and line.line_profile == line2.line_profile:
+                    raise ValueError(
+                        f"Line {line.line_name} with profile {line.line_profile} is not unique in star {self.starname}"
+                    )
+
 
     def apply_selecting(self, standard_epoch):
         for line, standard_line in zip(self.lines, standard_epoch.lines):
