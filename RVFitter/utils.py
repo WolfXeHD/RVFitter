@@ -8,21 +8,28 @@ def read_line_list(filename):
     for line in data.splitlines():
         if line.startswith("#"):
             continue
-        splitted_line = line.split(" ")
-        this_dict = {}
-        this_dict["line_name"] = splitted_line[0]
-        this_dict["line_profile"] = float(splitted_line[1])
-        this_dict["line_width"] = float(splitted_line[2])
-        lines.append(this_dict)
+        elif line.strip() == "":
+            continue
+        else:
+            try:
+                splitted_line = line.split(" ")
+                this_dict = {}
+                this_dict["line_name"] = splitted_line[0]
+                this_dict["line_profile"] = float(splitted_line[1])
+                this_dict["line_width"] = float(splitted_line[2])
+                lines.append(this_dict)
+            except:
+                raise Exception(f"Could not parse line {line}")
     return lines
 
 def manipulate_df_by_line_list(df, line_list):
     if line_list is not None:
         l_dfs = []
         for line in line_list:
-            this_df = df.query(
-                f"(line_name == \"{line['line_name']}\") & (line_profile == {line['line_profile']})"
-            )
+            masker1 = df["line_name"] == line["line_name"]
+            masker2 = df["line_profile"] == line["line_profile"]
+            full_masker = masker1 & masker2
+            this_df = df[full_masker]
             if len(this_df) == 0:
                 df_name = df.query(
                     f"(line_name == \"{line['line_name']}\")"
