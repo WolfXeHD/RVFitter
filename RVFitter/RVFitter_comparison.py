@@ -4,8 +4,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import sigfig
-import ipdb
-
 
 class RVFitter_comparison(object):
     """Docstring for RVFitter_comparison. """
@@ -188,7 +186,7 @@ class RVFitter_comparison(object):
             val = sigfig.round(x[value_var], x[error_var], separation=' \pm ')
         return "$" + val + "$"
 
-    def compare_fit_results_1D(self, variable, fig_and_ax=None, suffix=None):
+    def compare_fit_results_1D(self, variable, fig_and_ax=None, prefix=None, show_plot=True):
         if variable not in ["amp", "cen", "sig"]:
             raise Exception("Error: variable not in ['amp', 'cen', 'sig']")
 
@@ -238,11 +236,10 @@ class RVFitter_comparison(object):
         handles, labels = axes[-1].get_legend_handles_labels()
         if variable == 'cen':
             axes[-1].set_xlabel('Velocity (km/s)')
-            if suffix == None:
+            if prefix == None:
                 filename = "compare_results_velocity.png"
             else:
-                print(suffix)
-                filename = suffix + "_compare_results_velocity.png"
+                filename = prefix + "_compare_results_velocity.png"
         else:
             axes[-1].set_xlabel(variable)
             filename = "compare_results_{variable}.png"
@@ -252,7 +249,8 @@ class RVFitter_comparison(object):
 
         fig.savefig(this_filename)
         print(this_filename, "saved.")
-        plt.show()
+        if show_plot:
+            plt.show()
         plt.close(fig)
 
     def plot_fits_and_residuals(self,
