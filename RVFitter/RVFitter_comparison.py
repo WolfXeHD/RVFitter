@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import sigfig
 
-
 class RVFitter_comparison(object):
     """Docstring for RVFitter_comparison. """
 
@@ -187,7 +186,7 @@ class RVFitter_comparison(object):
             val = sigfig.round(x[value_var], x[error_var], separation=' \pm ')
         return "$" + val + "$"
 
-    def compare_fit_results_1D(self, variable, fig_and_ax=None):
+    def compare_fit_results_1D(self, variable, fig_and_ax=None, prefix=None, show_plot=True):
         if variable not in ["amp", "cen", "sig"]:
             raise Exception("Error: variable not in ['amp', 'cen', 'sig']")
 
@@ -213,6 +212,7 @@ class RVFitter_comparison(object):
             #sort dataframe by column
             this_df["line_profile"] = this_df["line_profile"].astype(int)
             this_df = this_df.sort_values(by='line_profile')
+            
             labels = this_df["line_name"].values
             this_df["labels"] = this_df.apply(
                 lambda x: x["line_name"] + " " + str(x["line_profile"]), axis=1)
@@ -236,16 +236,21 @@ class RVFitter_comparison(object):
         handles, labels = axes[-1].get_legend_handles_labels()
         if variable == 'cen':
             axes[-1].set_xlabel('Velocity (km/s)')
-            filename = "compare_results_velocity.png"
+            if prefix == None:
+                filename = "compare_results_velocity.png"
+            else:
+                filename = prefix + "_compare_results_velocity.png"
         else:
             axes[-1].set_xlabel(variable)
             filename = "compare_results_{variable}.png"
 
         fig.legend(handles, labels, ncol=2, loc='lower center')
-
         this_filename = os.path.join(self.output_folder, filename)
+
         fig.savefig(this_filename)
         print(this_filename, "saved.")
+        if show_plot:
+            plt.show()
         plt.close(fig)
 
     def plot_fits_and_residuals(self,
